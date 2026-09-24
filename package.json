@@ -1,0 +1,27 @@
+{
+  "name": "shwe-kokko-myawaddy-marketplace-bot",
+  "version": "1.0.0",
+  "description": "Telegram second-hand marketplace bot for Shwe Kokko and Myawaddy",
+  "main": "dist/bot.js",
+  "scripts": {
+    "dev": "node ./node_modules/ts-node-dev/lib/bin.js --respawn --transpile-only src/bot.ts",
+    "build": "tsc",
+    "start": "node dist/bot.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "dotenv": "^16.4.5",
+    "express": "^5.2.1",
+    "https-proxy-agent": "^9.1.0",
+    "socks-proxy-agent": "^10.1.0",
+    "telegraf": "^4.16.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/express": "^5.0.6",
+    "@types/node": "^20.14.10",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.5.3"
+  }
+}
