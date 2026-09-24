@@ -57,5 +57,6 @@ export interface WizardSessionData extends Scenes.WizardSessionData {
 export interface MyContext extends Context {
   scene: Scenes.SceneContextScene<MyContext, WizardSessionData>;
   session: Scenes.WizardSession<WizardSessionData>;
+  wizard: Scenes.WizardContextWizard<MyContext>;
   listingService: import('../services/listing.service').ListingService;
 }

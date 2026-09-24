@@ -2,6 +2,13 @@ import { Scenes, Markup } from 'telegraf';
 import { MyContext, WizardSessionData, Category, Location } from '../types/listing';
 import { generateListingId } from '../utils/idGenerator';
 
+// Typed helper to safely access wizard state
+// Telegraf types ctx.wizard.state as `object` due to generic constraints.
+// This helper provides compile-time safety for our custom session data.
+function wiz(ctx: MyContext): WizardSessionData {
+  return ctx.wizard.state as WizardSessionData;
+}
+
 const CATEGORIES = [
   { label: '📱 ဖုန်း/လျှပ်စစ်', value: Category.ELECTRONICS },
   { label: '👕 အဝတ်အထည်/ဖိနပ်', value: Category.CLOTHING },
@@ -17,8 +24,8 @@ const LOCATIONS = [
 
 export const sellScene = new Scenes.WizardScene<MyContext>(
   'SELL_SCENE',
-  
-  // Step 0: Product Name
+
+  // Step 0: Product Name prompt
   async (ctx) => {
     await ctx.reply(
       '🛍 ရောင်းချလိုသည့် ပစ္စည်းအမည်ကို ရေးပေးပါ -\n\n(ဥပမာ - iPhone 13 Pro)',
@@ -26,7 +33,7 @@ export const sellScene = new Scenes.WizardScene<MyContext>(
     );
     ctx.wizard.next();
   },
-  
+
   // Step 1: Validate Product Name -> Ask Category
   async (ctx) => {
     const text = ctx.message && 'text' in ctx.message ? ctx.message.text : '';
@@ -37,7 +44,7 @@ export const sellScene = new Scenes.WizardScene<MyContext>(
       return;
     }
 
-    ctx.wizard.state.productName = productName;
+    wiz(ctx).productName = productName;
 
     const buttons = CATEGORIES.map(c => Markup.button.callback(c.label, `cat:${c.value}`));
     await ctx.reply('📂 ပစ္စည်း အမျိုးအစားကို ရွေးချယ်ပါ -', Markup.inlineKeyboard(buttons, { columns: 1 }));
@@ -45,7 +52,6 @@ export const sellScene = new Scenes.WizardScene<MyContext>(
   },
 
   // Step 2: Validate Category -> Ask Location
-  // Inside Step 2 (Category selection)
   async (ctx) => {
     if (!ctx.callbackQuery || !('data' in ctx.callbackQuery)) {
       await ctx.reply('⚠️ ခလုတ်ကို နှိပ်၍ ရွေးချယ်ပေးပါ။');
@@ -64,18 +70,17 @@ export const sellScene = new Scenes.WizardScene<MyContext>(
       return;
     }
 
-    // Answer FIRST
     await ctx.answerCbQuery().catch(() => {});
-    // THEN edit
     await ctx.editMessageText(`📂 ရွေးချယ်ထားသော အမျိုးအစား - ${CATEGORIES.find(c => c.value === category)?.label}`);
 
-    ctx.wizard.state.category = category;
+    wiz(ctx).category = category;
+
     const buttons = LOCATIONS.map(l => Markup.button.callback(l.label, `loc:${l.value}`));
     await ctx.reply('📍 ပစ္စည်းရှိသည့် တည်နေရာကို ရွေးချယ်ပါ -', Markup.inlineKeyboard(buttons, { columns: 1 }));
     ctx.wizard.next();
   },
 
-  // Inside Step 3 (Location selection)
+  // Step 3: Validate Location -> Ask Price
   async (ctx) => {
     if (!ctx.callbackQuery || !('data' in ctx.callbackQuery)) {
       await ctx.reply('⚠️ ခလုတ်ကို နှိပ်၍ ရွေးချယ်ပေးပါ။');
@@ -94,40 +99,10 @@ export const sellScene = new Scenes.WizardScene<MyContext>(
       return;
     }
 
-    // Answer FIRST
     await ctx.answerCbQuery().catch(() => {});
-    // THEN edit
     await ctx.editMessageText(`📍 ရွေးချယ်ထားသော တည်နေရာ - ${LOCATIONS.find(l => l.value === location)?.label}`);
 
-    ctx.wizard.state.location = location;
-    await ctx.reply(
-      '💰 ရောင်းချလိုသည့် ဈေးနှုန်းနှင့် ငွေကြေးအမျိုးအစားကို ရေးပေးပါ -\n\n(ဥပမာ - 20000 MMK သို့မဟုတ် 500 THB)'
-    );
-    ctx.wizard.next();
-  },
-  // Step 3: Validate Location -> Ask Price
-  async (ctx) => {
-    if (!ctx.callbackQuery || !('data' in ctx.callbackQuery)) {
-      await ctx.reply('⚠️ ခလုတ်ကို နှိပ်၍ ရွေးချယ်ပေးပါ။');
-      return;
-    }
-
-    const data = ctx.callbackQuery.data;
-    if (!data.startsWith('loc:')) {
-      await ctx.answerCbQuery('မှန်ကန်သော ခလုတ်ကို နှိပ်ပါ။');
-      return;
-    }
-
-    const location = data.split(':')[1] as Location;
-    if (!Object.values(Location).includes(location)) {
-      await ctx.reply('⚠️ မှန်ကန်သော တည်နေရာကို ရွေးချယ်ပါ။');
-      return;
-    }
-
-    await ctx.answerCbQuery();
-    await ctx.editMessageText(`📍 ရွေးချယ်ထားသော တည်နေရာ - ${LOCATIONS.find(l => l.value === location)?.label}`);
-
-    ctx.wizard.state.location = location;
+    wiz(ctx).location = location;
 
     await ctx.reply(
       '💰 ရောင်းချလိုသည့် ဈေးနှုန်းနှင့် ငွေကြေးအမျိုးအစားကို ရေးပေးပါ -\n\n(ဥပမာ - 20000 MMK သို့မဟုတ် 500 THB)'
@@ -160,7 +135,7 @@ export const sellScene = new Scenes.WizardScene<MyContext>(
       return;
     }
 
-    ctx.wizard.state.price = { priceAmount: amount, currency };
+    wiz(ctx).price = { priceAmount: amount, currency };
 
     await ctx.reply(
       '✨ ပစ္စည်း၏ လက်ရှိအခြေအနေနှင့် အပြစ်အနာဆာများကို ရေးပြပေးပါ -\n\n(ဥပမာ - 90% သန့်၊ အစုတ်အပြဲမရှိ၊ ဘူးပါမည်)'
@@ -178,7 +153,7 @@ export const sellScene = new Scenes.WizardScene<MyContext>(
       return;
     }
 
-    ctx.wizard.state.condition = condition;
+    wiz(ctx).condition = condition;
 
     await ctx.reply(
       '📞 ဝယ်ယူလိုသူများ ဆက်သွယ်ရန် ဖုန်းနံပါတ် သို့မဟုတ် Telegram Username ကို ရေးပေးပါ -\n\n(ဥပမာ - 09123456789 သို့မဟုတ် @username)'
@@ -196,8 +171,8 @@ export const sellScene = new Scenes.WizardScene<MyContext>(
       return;
     }
 
-    ctx.wizard.state.contact = contact;
-    ctx.wizard.state.photoFileIds = [];
+    wiz(ctx).contact = contact;
+    wiz(ctx).photoFileIds = [];
 
     await ctx.reply(
       '📸 ပစ္စည်း ဓာတ်ပုံ ပို့ပေးပါ။\n\nအနည်းဆုံး ၁ ပုံ၊ အများဆုံး ၆ ပုံ ပို့နိုင်ပါသည်။\n\nဓာတ်ပုံ ပို့ပြီးပါက အောက်ပါ \'ပြီးပြီ ✅\' ခလုတ်ကို နှိပ်ပါ။',
@@ -206,11 +181,12 @@ export const sellScene = new Scenes.WizardScene<MyContext>(
     ctx.wizard.next();
   },
 
-  // Step 7: Collect Photos or finish
+  // Step 7: Collect Photos or Finish
   async (ctx) => {
-    const state = ctx.wizard.state;
+    const state = wiz(ctx);
     if (!state.photoFileIds) state.photoFileIds = [];
 
+    // Check if user pressed "Done"
     if (ctx.message && 'text' in ctx.message && ctx.message.text === 'ပြီးပြီ ✅') {
       if (state.photoFileIds.length < 1) {
         await ctx.reply('⚠️ အနည်းဆုံး ဓာတ်ပုံ ၁ ပုံ ပို့ပေးရန် လိုအပ်ပါသည်။');
@@ -218,28 +194,34 @@ export const sellScene = new Scenes.WizardScene<MyContext>(
       }
 
       await ctx.reply('⏳ သင့်ပစ္စည်းကို စိစစ်ရန် ပို့ပေးနေပါသည်...', Markup.removeKeyboard());
-      
+
       const from = ctx.from;
       if (!from) {
         await ctx.reply('⚠️ အသုံးပြုသူ အချက်အလက်ကို ရယူ၍ မရပါ။');
         return ctx.scene.leave();
       }
 
+      // Validate all required fields exist before submitting
+      if (!state.productName || !state.category || !state.location || !state.price || !state.condition || !state.contact) {
+        await ctx.reply('⚠️ အချက်အလက်များ မပြည့်စုံပါ။ ကျေးဇူးပြု၍ ပြန်လည်စတင်ပါ။');
+        return ctx.scene.leave();
+      }
+
       try {
         const id = generateListingId();
-        
+
         await ctx.listingService.createListing({
           id,
           seller_telegram_id: from.id,
           seller_username: from.username || null,
           seller_first_name: from.first_name || null,
-          product_name: state.productName!,
-          category: state.category!,
-          location: state.location!,
-          price_amount: state.price!.priceAmount,
-          currency: state.price!.currency,
-          condition: state.condition!,
-          contact: state.contact!,
+          product_name: state.productName,
+          category: state.category,
+          location: state.location,
+          price_amount: state.price.priceAmount,
+          currency: state.price.currency,
+          condition: state.condition,
+          contact: state.contact,
           photo_file_ids: state.photoFileIds,
         });
 
@@ -252,16 +234,17 @@ export const sellScene = new Scenes.WizardScene<MyContext>(
       return ctx.scene.leave();
     }
 
+    // Handle photo messages
     if (ctx.message && 'photo' in ctx.message) {
       if (state.photoFileIds.length >= 6) {
         await ctx.reply('⚠️ ဓာတ်ပုံ အများဆုံး ၆ ပုံသာ ပို့နိုင်ပါသည်။ ပိုပို့၍ မရပါ။');
         return;
       }
-      
+
       const photos = ctx.message.photo;
       const largestPhoto = photos[photos.length - 1];
       state.photoFileIds.push(largestPhoto.file_id);
-      
+
       await ctx.reply(`✅ ဓာတ်ပုံ လက်ခံရရှိပါပြီ။ (${state.photoFileIds.length}/6)`);
       return;
     }

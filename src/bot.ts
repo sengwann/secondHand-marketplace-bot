@@ -1,11 +1,7 @@
 import { Telegraf, Scenes, session, Markup } from 'telegraf';
-import { SocksProxyAgent } from 'socks-proxy-agent';
-import { HttpsProxyAgent } from 'https-proxy-agent';
+import type { Agent } from 'http';
 import dotenv from 'dotenv';
-import express from 'express';
-import { Server } from 'http';
 
-// Load environment variables first
 dotenv.config();
 
 import { config } from './config';
@@ -17,29 +13,36 @@ import { closeDatabase, getDatabase } from './db/database';
 import { registerAdminHandlers } from './handlers/admin.handler';
 
 // --- 1. PROXY CONFIGURATION ---
-let telegramOptions: ConstructorParameters<typeof Telegraf>[1] | undefined;
+// Using require() to avoid ESM/CJS module resolution conflicts
+function createProxyAgent(): Agent | undefined {
+  const socksProxy = process.env.SOCKS_PROXY;
+  const httpProxy = process.env.HTTP_PROXY;
 
-const socksProxy = process.env.SOCKS_PROXY;
-const httpProxy = process.env.HTTP_PROXY;
+  if (socksProxy) {
+    console.log('🔌 Using SOCKS proxy...');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { SocksProxyAgent } = require('socks-proxy-agent');
+    return new SocksProxyAgent(socksProxy) as Agent;
+  }
 
-if (socksProxy) {
-  console.log(`🔌 Using SOCKS proxy...`);
-  telegramOptions = {
-    telegram: {
-      agent: new SocksProxyAgent(socksProxy),
-    },
-  };
-} else if (httpProxy) {
-  console.log(`🔌 Using HTTP/HTTPS proxy...`);
-  telegramOptions = {
-    telegram: {
-      agent: new HttpsProxyAgent(httpProxy),
-    },
-  };
+  if (httpProxy) {
+    console.log('🔌 Using HTTP/HTTPS proxy...');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { HttpsProxyAgent } = require('https-proxy-agent');
+    return new HttpsProxyAgent(httpProxy) as Agent;
+  }
+
+  return undefined;
 }
 
+const proxyAgent = createProxyAgent();
+
 // --- 2. BOT INITIALIZATION ---
-const bot = new Telegraf<MyContext>(config.botToken, telegramOptions);
+const bot = proxyAgent
+  ? new Telegraf<MyContext>(config.botToken, {
+      telegram: { agent: proxyAgent },
+    })
+  : new Telegraf<MyContext>(config.botToken);
 
 // Initialize SQLite Database
 getDatabase();
@@ -53,36 +56,35 @@ bot.use(async (ctx, next) => {
   try {
     const updateType = ctx.updateType;
     const userId = ctx.from?.id || 'Unknown';
-    
+
     if (updateType === 'message' && ctx.message && 'text' in ctx.message) {
       console.log(`📥 RECEIVED MESSAGE: "${ctx.message.text}" from User ID: ${userId}`);
     } else if (updateType === 'callback_query') {
-      console.log(`🔘 RECEIVED BUTTON CLICK: "${(ctx.callbackQuery as any).data}" from User ID: ${userId}`);
+      console.log(`🔘 RECEIVED BUTTON CLICK from User ID: ${userId}`);
     } else {
       console.log(`🔄 RECEIVED UPDATE: ${updateType} from User ID: ${userId}`);
     }
   } catch (err) {
     // Ignore logging errors
   }
-  
   return next();
 });
 
 // --- 4. STANDARD MIDDLEWARE ---
-// Use standard Telegraf session initialization
-bot.use(session());
+bot.use(session({
+  defaultSession: () => ({ wizard: {} } as Scenes.WizardSession<WizardSessionData>)
+}));
 
-// Inject services into context for strict typing in scenes
 bot.use((ctx, next) => {
   ctx.listingService = listingService;
   return next();
 });
 
-// Register Wizard Scene
 const stage = new Scenes.Stage<MyContext>([sellScene], { ttl: 3600 });
 bot.use(stage.middleware());
 
 // --- 5. COMMAND HANDLERS ---
+
 const startHandler = async (ctx: MyContext) => {
   try {
     await ctx.reply(
@@ -113,6 +115,7 @@ bot.command('ပယ်ဖျက်ရန်', async (ctx) => {
 });
 
 // --- 6. CALLBACK HANDLERS ---
+
 bot.action('start_sell', async (ctx) => {
   await ctx.answerCbQuery().catch(() => {});
   ctx.scene.enter('SELL_SCENE');
@@ -138,7 +141,9 @@ bot.action('back_to_start', async (ctx) => {
   await ctx.answerCbQuery().catch(() => {});
   try {
     await ctx.deleteMessage().catch(() => {});
-  } catch (e) {}
+  } catch (e) {
+    // Ignore
+  }
   startHandler(ctx);
 });
 
@@ -152,60 +157,55 @@ bot.catch((err, ctx) => {
   ctx.reply('⚠️ စနစ်ပိုင်းဆိုင်ရာ အမှားအယွင်း ဖြစ်ပေါ်နေပါသည်။ ကျေးဇူးပြု၍ နောက်ထပ်ကြိုးစားပါ။').catch(console.error);
 });
 
-// --- 8. EXPRESS SERVER SETUP ---
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-app.get('/', (_req, res) => {
-  res.status(200).send('✅ Shwe Kokko & Myawaddy Marketplace Bot is alive!');
-});
-
-let server: Server;
-
-// --- 9. GRACEFUL SHUTDOWN ---
+// --- 8. GRACEFUL SHUTDOWN ---
 const stopBot = async (signal: string) => {
-  console.log(`\n🛑 Received ${signal}. Stopping process gracefully...`);
+  console.log(`\n🛑 Received ${signal}. Stopping bot gracefully...`);
   bot.stop(signal);
   closeDatabase();
-  if (server) {
-    server.close();
-  }
   process.exit(0);
 };
 
 process.once('SIGINT', () => stopBot('SIGINT'));
 process.once('SIGTERM', () => stopBot('SIGTERM'));
 
-// --- 10. LAUNCH APP & BOT ---
-async function main() {
-  // Start Express server first
-  server = app.listen(PORT, () => {
-    console.log(`🌐 Health-check server running on port ${PORT}`);
-  });
+// --- 9. DUMMY WEB SERVER FOR RENDER FREE TIER ---
+import express from 'express';
 
-  // Start Telegram Bot
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.get('/', (req, res) => {
+  res.status(200).send('✅ Shwe Kokko & Myawaddy Marketplace Bot is alive!');
+});
+
+// --- 10. LAUNCH BOT ---
+async function launchBot() {
   try {
     console.log('🚀 Connecting to Telegram API...');
-    
-    // Clear old webhooks
     await bot.telegram.deleteWebhook({ drop_pending_updates: true });
     console.log('✅ Webhooks cleared.');
-
     await bot.launch();
-    console.log('✅ Bot started successfully! Waiting for messages...\n');
-  } catch (err: any) {
+    console.log('✅ Bot started successfully! Waiting for messages...');
+  } catch (err: unknown) {
+    const error = err as { code?: string; response?: { error_code?: number }; message?: string };
     console.error('\n❌ FAILED TO START BOT:');
-    if (err.code === 'ETIMEDOUT' || err.code === 'ECONNREFUSED') {
+
+    if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED') {
       console.error('Network Error: Your internet or VPN is blocking api.telegram.org.');
-    } else if (err.response?.error_code === 409) {
+    } else if (error.response?.error_code === 409) {
       console.error('Conflict Error: Another instance of this bot is already running.');
-    } else if (err.response?.error_code === 401) {
-      console.error('Auth Error: BOT_TOKEN is invalid or revoked.');
+      console.error('Run "pkill -9 node" in your terminal, then try again.');
+    } else if (error.response?.error_code === 401) {
+      console.error('Auth Error: Your BOT_TOKEN in .env is invalid or revoked.');
     } else {
-      console.error(err.message || err);
+      console.error(error.message || err);
     }
     process.exit(1);
   }
 }
 
-main();
+// Start web server FIRST, then launch the Telegram bot
+app.listen(PORT, () => {
+  console.log(`🌐 Health-check server running on port ${PORT}`);
+  launchBot();
+});

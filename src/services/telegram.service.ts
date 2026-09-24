@@ -2,9 +2,10 @@ import { Telegraf, Markup } from 'telegraf';
 import { config } from '../config';
 import { Listing } from '../types/listing';
 import { formatListing } from '../utils/formatListing';
+import { MyContext } from '../types/listing';
 
 export class TelegramService {
-  constructor(private bot: Telegraf) {}
+  constructor(private bot: Telegraf<MyContext>) {}
 
   async sendAdminPreview(listing: Listing): Promise<number> {
     const caption = formatListing(listing);
@@ -19,12 +20,12 @@ export class TelegramService {
         parse_mode: 'HTML',
         ...keyboard
       });
-      
+
       const media = listing.photo_file_ids.slice(1).map(fileId => ({
-        type: 'photo',
+        type: 'photo' as const,
         media: fileId
       }));
-      await this.bot.telegram.sendMediaGroup(config.adminChatId, media as any);
+      await this.bot.telegram.sendMediaGroup(config.adminChatId, media);
       return msg.message_id;
     } else if (listing.photo_file_ids.length === 1) {
       const msg = await this.bot.telegram.sendPhoto(config.adminChatId, listing.photo_file_ids[0], {
@@ -48,13 +49,13 @@ export class TelegramService {
 
     if (listing.photo_file_ids.length > 1) {
       const media = listing.photo_file_ids.map((fileId, index) => ({
-        type: 'photo',
+        type: 'photo' as const,
         media: fileId,
         caption: index === 0 ? caption : undefined,
-        parse_mode: 'HTML'
+        parse_mode: 'HTML' as const
       }));
-      
-      const messages = await this.bot.telegram.sendMediaGroup(config.channelId, media as any);
+
+      const messages = await this.bot.telegram.sendMediaGroup(config.channelId, media);
       messageId = messages[0].message_id;
     } else if (listing.photo_file_ids.length === 1) {
       const msg = await this.bot.telegram.sendPhoto(config.channelId, listing.photo_file_ids[0], {
