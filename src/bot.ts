@@ -88,7 +88,7 @@ bot.use(stage.middleware());
 const startHandler = async (ctx: MyContext) => {
   try {
     await ctx.reply(
-      `မင်္ဂလာပါ။ ${config.channelName} bot မှ ကြိုဆိုပါတယ်။ 📦\n\nရွှေက္ကိုလ် နှင့် မြဝတီ မြို့နယ်များအတွင်း သင့်၏ Second-hand ပစ္စည်းများကို တိုက်ရိုက် ရောင်းချရန်အတွက် အောက်ပါ ခလုတ်ကို နှိပ်ပါ သို့မဟုတ် /ရောင်းရန် ဟု စာပို့၍ စတင်နိုင်ပါသည်။`,
+      `မင်္ဂလာပါ။ ${config.channelName} bot မှ ကြိုဆိုပါတယ်။ 📦\n\nရွှေက္ကိုလ် နှင့် မြဝတီ မြို့ကန်သာအတွက် အထွေထွေ ရောင်းဝယ်မှု Bot တစ်ခု ဖြစ်ပါသည်။`,
       Markup.inlineKeyboard([
         [Markup.button.callback('🛍 ပစ္စည်းရောင်းမည်', 'start_sell')],
         [Markup.button.callback('📜 စည်းကမ်းချက်များ', 'rules')]
@@ -128,8 +128,9 @@ bot.action('rules', async (ctx) => {
       '📜 စည်းကမ်းချက်များ\n\n' +
       '၁။ မိမိပိုင်ဆိုင်သော ပစ္စည်းများကိုသာ ရောင်းချရပါမည်။\n' +
       '၂။ ဥပဒေနှင့် ငြိစွန်းသော ပစ္စည်းများ လုံးဝ တင်ခြင်းမရှိရ။\n' +
-      '၃။ ဝယ်သူနှင့် ရောင်းသူ အချင်းချင်း ငွေကြေးလိမ်လည်မှုများအတွက် Admin များမှ တာဝန်ယူမည် မဟုတ်ပါ။\n' +
-      '၄။ လူချင်းတွေ့ဆုံ၍ ပစ္စည်းသေချာ စစ်ဆေးပြီးမှသာ ငွေချေပါရန် အကြံပြုအပ်ပါသည်။',
+      '၃။ ဝယ်သူနှင့် ���ောင်းသူ အချင်းချင်း ငွေကြေးလိမ်လည်မှုများအတွက် Admin များကို သတင်းပေးပို့ရပါမည်။\n' +
+      '၄။ လူချင်းတွေ့ဆုံ၍ ပစ္စည်းသေချာ စစ်ဆေးပြီးမှသာ ငွေချေပါရန် အကြံပြုအပ်ပါသည်။\n' +
+      '၅။ Bot အသုံးပြုမှုနှင့် ပတ်သက်၍ စိတ်မပါသော အမည်များ၊ မမှန်ကန်သော အချက်အလက်များ တင်ခြင်းမပြုရ။',
       Markup.inlineKeyboard([Markup.button.callback('◀️ နောက်သို့', 'back_to_start')])
     );
   } catch (error) {
@@ -154,7 +155,7 @@ registerAdminHandlers(bot, listingService);
 bot.catch((err, ctx) => {
   console.error(`\n❌ CRITICAL ERROR for ${ctx.updateType}:`);
   console.error(err);
-  ctx.reply('⚠️ စနစ်ပိုင်းဆိုင်ရာ အမှားအယွင်း ဖြစ်ပေါ်နေပါသည်။ ကျေးဇူးပြု၍ နောက်ထပ်ကြိုးစားပါ။').catch(console.error);
+  ctx.reply('⚠️ စနစ်ပိုင်းဆိုင်ရာ အမှားအယွင်း ဖြစ်ပေါ်နေပါသည်။ ကျေးဇူးပြု၍ နောက်တစ်ကြိမ် ထပ်မံကြိုးစားပါ။');
 });
 
 // --- 8. GRACEFUL SHUTDOWN ---
@@ -168,44 +169,50 @@ const stopBot = async (signal: string) => {
 process.once('SIGINT', () => stopBot('SIGINT'));
 process.once('SIGTERM', () => stopBot('SIGTERM'));
 
-// --- 9. DUMMY WEB SERVER FOR RENDER FREE TIER ---
+// --- 9. WEBHOOK CONFIGURATION ---
 import express from 'express';
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT) || 3000;
+const WEBHOOK_PATH = process.env.WEBHOOK_PATH || '/telegram/webhook';
+const WEBHOOK_SECRET_TOKEN = process.env.WEBHOOK_SECRET_TOKEN;
+const WEBHOOK_DOMAIN = process.env.WEBHOOK_DOMAIN || process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
+const webhookUrl = `${WEBHOOK_DOMAIN.replace(/\/$/, '')}${WEBHOOK_PATH}`;
 
 app.get('/', (req, res) => {
   res.status(200).send('✅ Shwe Kokko & Myawaddy Marketplace Bot is alive!');
 });
 
-// --- 10. LAUNCH BOT ---
-async function launchBot() {
+app.use(express.json());
+app.use(bot.webhookCallback(WEBHOOK_PATH, { secretToken: WEBHOOK_SECRET_TOKEN }));
+
+async function setupWebhook() {
   try {
-    console.log('🚀 Connecting to Telegram API...');
-    await bot.telegram.deleteWebhook({ drop_pending_updates: true });
-    console.log('✅ Webhooks cleared.');
-    await bot.launch();
-    console.log('✅ Bot started successfully! Waiting for messages...');
+    console.log('🚀 Setting Telegram webhook...');
+    await bot.telegram.setWebhook(webhookUrl, {
+      drop_pending_updates: true,
+      secret_token: WEBHOOK_SECRET_TOKEN,
+    });
+    console.log(`✅ Webhook configured successfully: ${webhookUrl}`);
   } catch (err: unknown) {
     const error = err as { code?: string; response?: { error_code?: number }; message?: string };
-    console.error('\n❌ FAILED TO START BOT:');
+    console.error('\n❌ FAILED TO SET WEBHOOK:');
 
     if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED') {
       console.error('Network Error: Your internet or VPN is blocking api.telegram.org.');
-    } else if (error.response?.error_code === 409) {
-      console.error('Conflict Error: Another instance of this bot is already running.');
-      console.error('Run "pkill -9 node" in your terminal, then try again.');
     } else if (error.response?.error_code === 401) {
       console.error('Auth Error: Your BOT_TOKEN in .env is invalid or revoked.');
     } else {
       console.error(error.message || err);
     }
+
     process.exit(1);
   }
 }
 
-// Start web server FIRST, then launch the Telegram bot
-app.listen(PORT, () => {
+// --- 10. START SERVER ---
+app.listen(PORT, async () => {
   console.log(`🌐 Health-check server running on port ${PORT}`);
-  launchBot();
+  await setupWebhook();
+  console.log('✅ Bot is listening for webhook traffic...');
 });
