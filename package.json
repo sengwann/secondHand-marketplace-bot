@@ -9,8 +9,12 @@
     "start": "node dist/bot.js",
     "typecheck": "tsc --noEmit"
   },
+  "engines": {
+    "node": "20.x",
+    "npm": ">=10"
+  },
   "dependencies": {
-    "better-sqlite3": "^11.3.0",
+    "better-sqlite3": "11.10.0",
     "dotenv": "^16.4.5",
     "express": "^5.2.1",
     "https-proxy-agent": "^9.1.0",
