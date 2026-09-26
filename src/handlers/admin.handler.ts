@@ -229,173 +229,149 @@ export function registerAdminHandlers(
   );
 
   // ==========================================================
-  // Rejection reason
-  // ==========================================================
+// Rejection reason
+// ==========================================================
 
-  bot.on(
-    'text',
-    async (ctx, next) => {
+bot.on(
+  'text',
+  async (ctx, next) => {
+    /*
+     * Only process rejection replies in
+     * the admin chat.
+     */
+
+    if (
+      !isAdmin(ctx) ||
+      !isAdminChat(ctx) ||
+      !('reply_to_message' in ctx.message)
+    ) {
+      return next();
+    }
+
+    const chatId = ctx.chat?.id;
+
+    if (chatId === undefined) {
+      return next();
+    }
+
+    const repliedMessage =
+      ctx.message.reply_to_message;
+
+    if (!repliedMessage) {
+      return next();
+    }
+
+    /*
+     * The admin's message must be a reply to:
+     *
+     * ❌ ပယ်ဖျက်မည် - ID: xxx
+     */
+    const replyText =
+      'text' in repliedMessage
+        ? repliedMessage.text
+        : '';
+
+    const match =
+      replyText.match(
+        /^❌ ပယ်ဖျက်မည် - ID: (.+)$/
+      );
+
+    if (!match) {
+      return next();
+    }
+
+    const listingId =
+      match[1].trim();
+
+    const reason =
+      ctx.message.text.trim();
+
+    if (!reason) {
+      return ctx.reply(
+        '⚠️ အကြောင်းပြချက် မရှိပါ။'
+      );
+    }
+
+    try {
       /*
-       * Only process rejection replies in
-       * the admin chat.
+       * Reject the listing in the database.
        */
+      const result =
+        await listingService.rejectListing(
+          listingId,
+          reason
+        );
+
+      /*
+       * The rejection prompt is a reply to
+       * the admin control message.
+       *
+       * Therefore:
+       *
+       * Admin reason
+       *      ↓
+       * Rejection prompt
+       *      ↓
+       * Control message
+       */
+      const rejectionPrompt =
+        repliedMessage;
+
+      const rejectionPromptData =
+        rejectionPrompt as unknown as {
+          reply_to_message?: {
+            message_id: number;
+          };
+        };
+
+      const controlMessageId =
+        rejectionPromptData
+          .reply_to_message
+          ?.message_id;
 
       if (
-        !isAdmin(ctx) ||
-        !isAdminChat(ctx) ||
-        !('reply_to_message' in ctx.message)
+        controlMessageId === undefined
       ) {
-        return next();
-      }
+        console.error(
+          '❌ Could not find control message ID for rejection.'
+        );
 
-      const repliedMessage =
-        ctx.message.reply_to_message;
-
-      if (!repliedMessage) {
-        return next();
+        return;
       }
 
       /*
-       * The admin's message must be a reply to:
-       *
-       * ❌ ပယ်ဖျက်မည် - ID: xxx
-       *
-       * The rejection prompt is a normal text message,
-       * so check its text.
+       * Update the admin control message.
        */
-      const replyText =
-        'text' in repliedMessage
-          ? repliedMessage.text
-          : '';
-
-      const match =
-        replyText.match(
-          /^❌ ပယ်ဖျက်မည် - ID: (.+)$/
-        );
-
-      if (!match) {
-        return next();
-      }
-
-      const listingId =
-        match[1].trim();
-
-      const reason =
-        ctx.message.text.trim();
-
-      if (!reason) {
-        return ctx.reply(
-          '⚠️ အကြောင်းပြချက် မရှိပါ။'
-        );
-      }
-
       try {
-        /*
-         * First reject the listing in the database.
-         */
-        const result =
-          await listingService.rejectListing(
-            listingId,
-            reason
-          );
-
-        /*
-         * IMPORTANT:
-         *
-         * Message structure:
-         *
-         * Photo #1
-         *     ↑
-         *     └── Control message
-         *             ↑
-         *             └── Rejection prompt
-         *                     ↑
-         *                     └── Admin reason
-         *
-         * We need to walk backwards:
-         *
-         * admin reason
-         *      ↓
-         * rejection prompt
-         *      ↓
-         * control message
-         *      ↓
-         * first photo
-         */
-
-        // ------------------------------------------------------
-        // Find control message
-        // ------------------------------------------------------
-
-        const rejectionPrompt =
-          repliedMessage;
-
-        const rejectionPromptData =
-          rejectionPrompt as unknown as {
-            reply_to_message?: {
-              message_id: number;
-            };
-          };
-
-        const controlMessageId =
-          rejectionPromptData
-            .reply_to_message
-            ?.message_id;
-
-        if (
-          controlMessageId === undefined
-        ) {
-          console.error(
-            '❌ Could not find control message ID for rejection.'
-          );
-
-          return;
-        }
-
-        // ------------------------------------------------------
-        // We now need the original photo message.
-        //
-        // The rejection prompt replies to the control message.
-        // The control message replies to photo #1.
-        //
-        // Telegram does not give us the full control message
-        // object here, so fetch it is not available through
-        // Bot API.
-        //
-        // Instead, use the control message itself as the
-        // message we update after rejection.
-        // ------------------------------------------------------
-
-        try {
-          await ctx.telegram.editMessageText(
-            ctx.chat.id,
-            controlMessageId,
-            undefined,
-            result.message,
-            {
-              parse_mode: 'HTML',
-            }
-          );
-        } catch (error) {
-          console.error(
-            '❌ Failed to update rejection control message:',
-            error
-          );
-        }
+        await ctx.telegram.editMessageText(
+          chatId,
+          controlMessageId,
+          undefined,
+          result.message,
+          {
+            parse_mode: 'HTML',
+          }
+        );
       } catch (error) {
         console.error(
-          '❌ Admin reject error:',
+          '❌ Failed to update rejection control message:',
           error
         );
-
-        await ctx.reply(
-          error instanceof Error
-            ? `❌ ${error.message}`
-            : '❌ ပစ္စည်းပယ်ဖျက်ရာတွင် အမှားဖြစ်နေပါသည်။'
-        );
       }
+    } catch (error) {
+      console.error(
+        '❌ Admin reject error:',
+        error
+      );
 
-      return;
+      await ctx.reply(
+        error instanceof Error
+          ? `❌ ${error.message}`
+          : '❌ ပစ္စည်းပယ်ဖျက်ရာတွင် အမှားဖြစ်နေပါသည်။'
+      );
     }
-  );
+
+    return;
+  }
+);
 }
