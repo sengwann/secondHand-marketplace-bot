@@ -6,11 +6,10 @@ import { ListingService } from '../services/listing.service';
 import { SettingService } from '../services/setting.service';
 
 export function registerAdminHandlers(
-  bot: Telegraf<MyContext>, 
+  bot: Telegraf<MyContext>,
   listingService: ListingService,
   settingService: SettingService
 ) {
-  // Command for Admins to dynamically update rules
   bot.command('setrules', async (ctx) => {
     if (!isAdmin(ctx)) {
       return ctx.reply('⚠️ ဤ Command ကို အုပ်ထိန်းသူများသာ အသုံးပြုခွင့်ရှိပါသည်။');
@@ -41,23 +40,23 @@ export function registerAdminHandlers(
   bot.action(/^approve:(.+)$/, async (ctx) => {
     if (!isAdmin(ctx)) return ctx.answerCbQuery('⚠️ ဤခလုတ်ကို အုပ်ထိန်းသူများသာ နှိပ်ခွင့်ရှိပါသည်။', { show_alert: true }).catch(() => {});
     await ctx.answerCbQuery().catch(() => {});
-    
+
     const listingId = ctx.match[1];
     try {
       const result = await listingService.approveListing(listingId);
       if (ctx.callbackQuery?.message) {
-        try { await ctx.editMessageCaption(result.message, { parse_mode: 'HTML' }); } 
-        catch { await ctx.editMessageText(result.message).catch(() => {}); }
+        try { await ctx.editMessageCaption(result.message, { parse_mode: 'HTML' }); }
+        catch { await ctx.editMessageText(result.message, { parse_mode: 'HTML' }).catch(() => {}); }
       }
     } catch (error) {
-      console.error('Admin approve error', error);
+      console.error('Admin approve error:', error);
     }
   });
 
   bot.action(/^reject:(.+)$/, async (ctx) => {
     if (!isAdmin(ctx)) return ctx.answerCbQuery('⚠️ ဤခလုတ်ကို အုပ်ထိန်းသူများသာ နှိပ်ခွင့်ရှိပါသည်။', { show_alert: true }).catch(() => {});
     await ctx.answerCbQuery().catch(() => {});
-    
+
     const listingId = ctx.match[1];
     const originalMsgId = ctx.callbackQuery!.message!.message_id;
     await ctx.reply(`❌ ပယ်ဖျက်မည် - ID: ${listingId} | MSG: ${originalMsgId}\n\nပယ်ဖျက်ရသည့် အကြောင်းပြချက်ကို ရေးပေးပါ -`, Markup.forceReply());
@@ -74,8 +73,8 @@ export function registerAdminHandlers(
         if (!reason) return ctx.reply('⚠️ အကြောင်းပြချက် မရှိပါ။');
 
         const result = await listingService.rejectListing(listingId, reason);
-        try { await ctx.telegram.editMessageCaption(ctx.chat.id, parseInt(originalMsgIdStr, 10), undefined, result.message, { parse_mode: 'HTML' }); } 
-        catch { await ctx.telegram.editMessageText(ctx.chat.id, parseInt(originalMsgIdStr, 10), undefined, result.message).catch(() => {}); }
+        try { await ctx.telegram.editMessageCaption(ctx.chat.id, parseInt(originalMsgIdStr, 10), undefined, result.message, { parse_mode: 'HTML' }); }
+        catch { await ctx.telegram.editMessageText(ctx.chat.id, parseInt(originalMsgIdStr, 10), undefined, result.message, { parse_mode: 'HTML' }).catch(() => {}); }
         return;
       }
     }

@@ -1,4 +1,6 @@
 import { Context, Scenes } from 'telegraf';
+import { ListingService } from '../services/listing.service';
+import { SettingService } from '../services/setting.service';
 
 export enum ListingStatus {
   PENDING = 'PENDING',
@@ -27,25 +29,6 @@ export interface Price {
   currency: Currency;
 }
 
-export interface Listing {
-  id: string;
-  seller_telegram_id: number;
-  seller_username: string | null;
-  seller_first_name: string | null;
-  product_name: string;
-  category: Category;
-  location: Location;
-  price_amount: number;
-  currency: Currency;
-  condition: string;
-  contact: string;
-  photo_file_ids: string[];
-  status: ListingStatus;
-  rejection_reason: string | null;
-  channel_message_id: number | null;
-  created_at: Date;
-}
-
 export interface WizardSessionData extends Scenes.WizardSessionData {
   productName?: string;
   category?: Category;
@@ -60,6 +43,6 @@ export interface MyContext extends Context {
   scene: Scenes.SceneContextScene<MyContext, WizardSessionData>;
   session: Scenes.WizardSession<WizardSessionData>;
   wizard: Scenes.WizardContextWizard<MyContext>;
-  listingService: import('../services/listing.service').ListingService;
-  settingService: import('../services/setting.service').SettingService;
+  listingService: ListingService;
+  settingService: SettingService;
 }

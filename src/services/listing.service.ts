@@ -38,9 +38,18 @@ export class ListingService {
     });
 
     const formattedListing = {
-      ...listing,
+      id: listing.id,
       sellerTelegramId: Number(listing.sellerTelegramId),
-      channelMessageId: listing.channelMessageId ? Number(listing.channelMessageId) : null,
+      sellerUsername: listing.sellerUsername,
+      sellerFirstName: listing.sellerFirstName,
+      productName: listing.productName,
+      category: listing.category,
+      location: listing.location,
+      priceAmount: listing.priceAmount,
+      currency: listing.currency,
+      condition: listing.condition,
+      contact: listing.contact,
+      photoFileIds: listing.photoFileIds,
     };
 
     await this.telegramService.sendToAdminGroup(formattedListing);

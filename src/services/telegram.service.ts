@@ -2,24 +2,26 @@ import { Telegraf, Markup } from 'telegraf';
 import { MyContext } from '../types/listing';
 import { config } from '../config';
 
+export interface AdminListingPayload {
+  id: string;
+  sellerTelegramId: number;
+  sellerUsername?: string | null;
+  sellerFirstName?: string | null;
+  productName: string;
+  category: string;
+  location: string;
+  priceAmount: number;
+  currency: string;
+  condition: string;
+  contact: string;
+  photoFileIds: string[];
+}
+
 export class TelegramService {
   constructor(private bot: Telegraf<MyContext>) {}
 
-  async sendToAdminGroup(listing: {
-    id: string;
-    sellerTelegramId: number;
-    sellerUsername?: string | null;
-    sellerFirstName?: string | null;
-    productName: string;
-    category: string;
-    location: string;
-    priceAmount: number;
-    currency: string;
-    condition: string;
-    contact: string;
-    photoFileIds: string[];
-  }) {
-    const caption = 
+  async sendToAdminGroup(listing: AdminListingPayload) {
+    const caption =
       `<b>📌 ရောင်းရန် ပစ္စည်းအသစ် ရောက်ရှိလာပါသည်</b>\n\n` +
       `<b>ပစ္စည်းအမည်:</b> ${listing.productName}\n` +
       `<b>အမျိုးအစား:</b> ${listing.category}\n` +
@@ -36,7 +38,6 @@ export class TelegramService {
       ],
     ]);
 
-    // Send photo with caption if photos are available
     if (listing.photoFileIds && listing.photoFileIds.length > 0) {
       return await this.bot.telegram.sendPhoto(
         config.adminChatId,
@@ -49,7 +50,6 @@ export class TelegramService {
       );
     }
 
-    // Send text message if no photos are provided
     return await this.bot.telegram.sendMessage(
       config.adminChatId,
       caption,
