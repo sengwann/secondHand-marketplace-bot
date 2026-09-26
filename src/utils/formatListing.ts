@@ -11,11 +11,11 @@ import { escapeHtml } from './htmlEscape';
 // ============================================================
 
 const categoryNames: Record<Category, string> = {
-  [Category.ELECTRONICS]: 'အီလက်ထရောနစ်',
-  [Category.CLOTHING]: 'အဝတ်အထည်',
-  [Category.HOME]: 'အိမ်သုံးပစ္စည်း',
-  [Category.VEHICLE]: 'ယာဉ်မောင်းနှင်မှု',
-  [Category.OTHER]: 'အခြား',
+  [Category.ELECTRONICS]: 'Electronic',
+  [Category.CLOTHING]: 'Fashion',
+  [Category.HOME]: 'Home',
+  [Category.VEHICLE]: 'Vehicle',
+  [Category.OTHER]: 'Other',
 };
 
 const locationNames: Record<Location, string> = {
@@ -32,7 +32,7 @@ function toHashtag(value: string): string {
     .trim()
     .replace(/\s+/g, '')
     .replace(
-      /[^a-zA-Z0-9_က-၉]/g,
+      /[^a-zA-Z0-9_A-Z]/g,
       ''
     );
 }

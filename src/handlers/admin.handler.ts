@@ -92,7 +92,7 @@ export function registerAdminHandlers(
     /^approve:(.+)$/,
     async (ctx) => {
       if (!isAdmin(ctx)) {
-        return ctx
+        await ctx
           .answerCbQuery(
             '⚠️ ဤခလုတ်ကို အုပ်ထိန်းသူများသာ နှိပ်ခွင့်ရှိပါသည်။',
             {
@@ -100,6 +100,8 @@ export function registerAdminHandlers(
             }
           )
           .catch(() => {});
+
+        return;
       }
 
       await ctx
@@ -117,26 +119,39 @@ export function registerAdminHandlers(
             listingId
           );
 
-        if (
-          ctx.callbackQuery.message
-        ) {
-          try {
-            await ctx.editMessageCaption(
-              result.message,
-              {
-                parse_mode: 'HTML',
-              }
-            );
-          } catch {
-            await ctx
-              .editMessageText(
-                result.message,
-                {
-                  parse_mode: 'HTML',
-                }
-              )
-              .catch(() => {});
-          }
+        /*
+         * The approve/reject buttons are now on
+         * a separate control message.
+         *
+         * We only need to update that control message
+         * after approval.
+         */
+        const controlMessage =
+          ctx.callbackQuery.message;
+
+        if (!controlMessage) {
+          return;
+        }
+
+        try {
+          /*
+           * The control message is a normal text message,
+           * so update it using editMessageText().
+           */
+          await ctx.telegram.editMessageText(
+            ctx.chat.id,
+            controlMessage.message_id,
+            undefined,
+            result.message,
+            {
+              parse_mode: 'HTML',
+            }
+          );
+        } catch (error) {
+          console.error(
+            '❌ Failed to update approve control message:',
+            error
+          );
         }
       } catch (error) {
         console.error(
@@ -166,7 +181,7 @@ export function registerAdminHandlers(
     /^reject:(.+)$/,
     async (ctx) => {
       if (!isAdmin(ctx)) {
-        return ctx
+        await ctx
           .answerCbQuery(
             '⚠️ ဤခလုတ်ကို အုပ်ထိန်းသူများသာ နှိပ်ခွင့်ရှိပါသည်။',
             {
@@ -174,6 +189,8 @@ export function registerAdminHandlers(
             }
           )
           .catch(() => {});
+
+        return;
       }
 
       await ctx
@@ -183,17 +200,30 @@ export function registerAdminHandlers(
       const listingId =
         ctx.match[1];
 
-      const message =
+      const controlMessage =
         ctx.callbackQuery.message;
 
-      if (!message) {
+      if (!controlMessage) {
         return;
       }
 
+      /*
+       * The control message was sent as a reply to
+       * the first photo of the listing album.
+       *
+       * We reply to the control message asking for
+       * the rejection reason.
+       */
       await ctx.reply(
         `❌ ပယ်ဖျက်မည် - ID: ${listingId}\n\n` +
         `ပယ်ဖျက်ရသည့် အကြောင်းပြချက်ကို ရေးပေးပါ -`,
-        Markup.forceReply()
+        {
+          ...Markup.forceReply(),
+          reply_parameters: {
+            message_id:
+              controlMessage.message_id,
+          },
+        }
       );
     }
   );
@@ -218,10 +248,6 @@ export function registerAdminHandlers(
         return next();
       }
 
-      /*
-       * At this point TypeScript knows that
-       * reply_to_message exists on ctx.message.
-       */
       const repliedMessage =
         ctx.message.reply_to_message;
 
@@ -230,11 +256,12 @@ export function registerAdminHandlers(
       }
 
       /*
-       * The admin's rejection prompt contains:
+       * The admin's message must be a reply to:
        *
        * ❌ ပယ်ဖျက်မည် - ID: xxx
        *
-       * Check its text before doing anything else.
+       * The rejection prompt is a normal text message,
+       * so check its text.
        */
       const replyText =
         'text' in repliedMessage
@@ -263,6 +290,9 @@ export function registerAdminHandlers(
       }
 
       try {
+        /*
+         * First reject the listing in the database.
+         */
         const result =
           await listingService.rejectListing(
             listingId,
@@ -270,49 +300,87 @@ export function registerAdminHandlers(
           );
 
         /*
-         * repliedMessage is the admin's
-         * "❌ ပယ်ဖျက်မည်..." message.
+         * IMPORTANT:
          *
-         * That message itself was a reply to the
-         * original listing message.
+         * Message structure:
          *
-         * We only need the original message ID.
+         * Photo #1
+         *     ↑
+         *     └── Control message
+         *             ↑
+         *             └── Rejection prompt
+         *                     ↑
+         *                     └── Admin reason
+         *
+         * We need to walk backwards:
+         *
+         * admin reason
+         *      ↓
+         * rejection prompt
+         *      ↓
+         * control message
+         *      ↓
+         * first photo
          */
-        const repliedMessageWithOriginal = repliedMessage as {
-  reply_to_message?: {
-    message_id: number;
-  };
-};
 
-const originalMessageId =
-  repliedMessageWithOriginal.reply_to_message?.message_id;
+        // ------------------------------------------------------
+        // Find control message
+        // ------------------------------------------------------
+
+        const rejectionPrompt =
+          repliedMessage;
+
+        const rejectionPromptData =
+          rejectionPrompt as unknown as {
+            reply_to_message?: {
+              message_id: number;
+            };
+          };
+
+        const controlMessageId =
+          rejectionPromptData
+            .reply_to_message
+            ?.message_id;
 
         if (
-          originalMessageId !== undefined
+          controlMessageId === undefined
         ) {
-          try {
-            await ctx.telegram.editMessageCaption(
-              ctx.chat.id,
-              originalMessageId,
-              undefined,
-              result.message,
-              {
-                parse_mode: 'HTML',
-              }
-            );
-          } catch {
-            await ctx.telegram
-              .editMessageText(
-                ctx.chat.id,
-                originalMessageId,
-                undefined,
-                result.message,
-                {
-                  parse_mode: 'HTML',
-                }
-              )
-              .catch(() => {});
-          }
+          console.error(
+            '❌ Could not find control message ID for rejection.'
+          );
+
+          return;
+        }
+
+        // ------------------------------------------------------
+        // We now need the original photo message.
+        //
+        // The rejection prompt replies to the control message.
+        // The control message replies to photo #1.
+        //
+        // Telegram does not give us the full control message
+        // object here, so fetch it is not available through
+        // Bot API.
+        //
+        // Instead, use the control message itself as the
+        // message we update after rejection.
+        // ------------------------------------------------------
+
+        try {
+          await ctx.telegram.editMessageText(
+            ctx.chat.id,
+            controlMessageId,
+            undefined,
+            result.message,
+            {
+              parse_mode: 'HTML',
+            }
+          );
+        } catch (error) {
+          console.error(
+            '❌ Failed to update rejection control message:',
+            error
+          );
         }
       } catch (error) {
         console.error(

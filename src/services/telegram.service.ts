@@ -5,9 +5,6 @@ import {
 
 import {
   Listing,
-} from '../types/listing';
-
-import {
   MyContext,
 } from '../types/listing';
 
@@ -62,26 +59,79 @@ export class TelegramService {
         ],
       ]);
 
-    if (listing.photoFileIds.length > 0) {
-      return this.bot.telegram.sendPhoto(
+    // --------------------------------------------------------
+    // No photos
+    // --------------------------------------------------------
+
+    if (
+      listing.photoFileIds.length === 0
+    ) {
+      return this.bot.telegram.sendMessage(
         config.adminChatId,
-        listing.photoFileIds[0],
+        caption,
         {
-          caption,
           parse_mode: 'HTML',
           ...keyboard,
         }
       );
     }
 
-    return this.bot.telegram.sendMessage(
-      config.adminChatId,
-      caption,
-      {
-        parse_mode: 'HTML',
-        ...keyboard,
-      }
+    // --------------------------------------------------------
+    // Multiple photos
+    // --------------------------------------------------------
+    //
+    // Telegram media groups can contain up to 10 photos.
+    //
+    // We put the caption on the first photo.
+    // The remaining photos are part of the same album.
+    //
+    // --------------------------------------------------------
+
+    const media = listing.photoFileIds.map(
+      (fileId, index) => ({
+        type: 'photo' as const,
+        media: fileId,
+        ...(index === 0
+          ? {
+              caption,
+              parse_mode: 'HTML' as const,
+            }
+          : {}),
+      })
     );
+
+    const messages =
+      await this.bot.telegram.sendMediaGroup(
+        config.adminChatId,
+        media
+      );
+
+    // --------------------------------------------------------
+    // Send admin buttons separately
+    // --------------------------------------------------------
+    //
+    // Telegram does not allow the inline keyboard to be
+    // attached to the media group as a whole.
+    //
+    // We send a separate message containing the buttons.
+    //
+    // --------------------------------------------------------
+
+    const controlMessage =
+      await this.bot.telegram.sendMessage(
+        config.adminChatId,
+        `📌 <b>ပစ္စည်းကို စီမံရန်</b>\n\n` +
+        `ID: <code>${escapeHtml(listing.id)}</code>`,
+        {
+          parse_mode: 'HTML',
+          ...keyboard,
+          reply_parameters: {
+            message_id: messages[0].message_id,
+          },
+        }
+      );
+
+    return controlMessage;
   }
 
   // ==========================================================
@@ -94,7 +144,13 @@ export class TelegramService {
     const caption =
       formatListingMessage(listing);
 
-    if (listing.photoFileIds.length === 0) {
+    // --------------------------------------------------------
+    // No photos
+    // --------------------------------------------------------
+
+    if (
+      listing.photoFileIds.length === 0
+    ) {
       return this.bot.telegram.sendMessage(
         config.channelId,
         caption,
@@ -104,14 +160,47 @@ export class TelegramService {
       );
     }
 
-    return this.bot.telegram.sendPhoto(
-      config.channelId,
-      listing.photoFileIds[0],
-      {
-        caption,
-        parse_mode: 'HTML',
-      }
+    // --------------------------------------------------------
+    // Multiple photos
+    // --------------------------------------------------------
+
+    const media = listing.photoFileIds.map(
+      (fileId, index) => ({
+        type: 'photo' as const,
+        media: fileId,
+        ...(index === 0
+          ? {
+              caption,
+              parse_mode: 'HTML' as const,
+            }
+          : {}),
+      })
     );
+
+    const messages =
+      await this.bot.telegram.sendMediaGroup(
+        config.channelId,
+        media
+      );
+
+    // --------------------------------------------------------
+    // IMPORTANT
+    // --------------------------------------------------------
+    //
+    // We keep the first message's ID.
+    //
+    // Your database currently has:
+    //
+    //   channelMessageId
+    //
+    // This ID represents the first photo in the album.
+    //
+    // The listing caption is also on this first photo,
+    // so updateChannelListing() can continue editing it.
+    //
+    // --------------------------------------------------------
+
+    return messages[0];
   }
 
   // ==========================================================
@@ -131,7 +220,9 @@ export class TelegramService {
       formatListingMessage(listing);
 
     try {
-      if (listing.photoFileIds.length > 0) {
+      if (
+        listing.photoFileIds.length > 0
+      ) {
         await this.bot.telegram.editMessageCaption(
           config.channelId,
           listing.channelMessageId,
