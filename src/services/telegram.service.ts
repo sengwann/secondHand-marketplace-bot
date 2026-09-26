@@ -39,15 +39,33 @@ export class TelegramService {
     ]);
 
     if (listing.photoFileIds && listing.photoFileIds.length > 0) {
-      return await this.bot.telegram.sendPhoto(
-        config.adminChatId,
-        listing.photoFileIds[0],
-        {
-          caption,
-          parse_mode: 'HTML',
-          ...inlineKeyboard,
-        }
-      );
+       console.log('📤 Sending listing to admin group...');
+console.log('📍 Admin Chat ID:', config.adminChatId);
+console.log('🖼️ Photo File ID:', listing.photoFileIds[0]);
+
+try {
+  const result = await this.bot.telegram.sendPhoto(
+    config.adminChatId,
+    listing.photoFileIds[0],
+    {
+      caption,
+      parse_mode: 'HTML',
+      ...inlineKeyboard,
+    }
+  );
+
+  console.log('✅ Successfully sent listing to admin group');
+  return result;
+} catch (error) {
+  console.error('❌ Failed to send listing to admin group:', error);
+
+  if (error instanceof Error) {
+    console.error('❌ Telegram error:', error.message);
+    console.error('❌ Stack:', error.stack);
+  }
+
+  throw error;
+}
     }
 
     return await this.bot.telegram.sendMessage(
