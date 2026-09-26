@@ -15,7 +15,7 @@ enum ListingStatus {
 }
 
 model Listing {
-  id               String        @id
+  id               String        @id @default(uuid())
   sellerTelegramId BigInt        @map("seller_telegram_id")
   sellerUsername   String?       @map("seller_username")
   sellerFirstName  String?       @map("seller_first_name")
@@ -37,7 +37,6 @@ model Listing {
   @@index([createdAt])
   @@map("listings")
 }
-
 model AppSetting {
   key       String   @id
   value     String
