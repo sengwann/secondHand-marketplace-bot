@@ -1,5 +1,5 @@
 import { Telegraf, Scenes, session, Markup } from 'telegraf';
-import express from 'express';
+import express, { Request, Response } from 'express';
 import type { Agent } from 'http';
 import dotenv from 'dotenv';
 import { config } from './config';
@@ -109,17 +109,28 @@ const WEBHOOK_PATH = process.env.WEBHOOK_PATH || '/telegram/webhook';
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET_TOKEN;
 const WEBHOOK_URL = `${(process.env.WEBHOOK_DOMAIN || `http://localhost:${PORT}`).replace(/\/$/, '')}${WEBHOOK_PATH}`;
 
-app.get('/', (req, res) => res.status(200).send('✅ Bot is alive!'));
+// Health check endpoint with explicit Express types
+app.get('/', (req: Request, res: Response) => {
+  res.status(200).send('✅ Bot is alive!');
+});
+
+// Middleware for parsing JSON bodies
 app.use(express.json());
+
+// Telegraf built-in webhook callback handler
 app.use(bot.webhookCallback(WEBHOOK_PATH, { secretToken: WEBHOOK_SECRET }));
 
+// 3. Start Express Server & Connect Services
 app.listen(PORT, async () => {
   console.log(`🌐 Health-check server running on port ${PORT}`);
   try {
     await prisma.$connect();
     console.log('✅ PostgreSQL Database connected successfully via Prisma 7+');
-    
-    await bot.telegram.setWebhook(WEBHOOK_URL, { drop_pending_updates: true, secret_token: WEBHOOK_SECRET });
+
+    await bot.telegram.setWebhook(WEBHOOK_URL, {
+      drop_pending_updates: true,
+      secret_token: WEBHOOK_SECRET,
+    });
     console.log(`✅ Webhook configured: ${WEBHOOK_URL}`);
   } catch (err) {
     console.error('\n❌ FAILED TO START:', err);
