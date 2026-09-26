@@ -1,14 +1,19 @@
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { Pool } from 'pg';
 
-// Prevent multiple instances of Prisma Client in development
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
+const connectionString = process.env.DATABASE_URL;
 
-export const prisma = globalForPrisma.prisma || new PrismaClient({
-  log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-});
-
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
-
-export async function closeDatabase() {
-  await prisma.$disconnect();
+if (!connectionString) {
+  throw new Error('DATABASE_URL environment variable is missing.');
 }
+
+const pool = new Pool({ connectionString });
+const adapter = new PrismaPg(pool);
+
+export const prisma = new PrismaClient({ adapter });
+
+export const closeDatabase = async () => {
+  await prisma.$disconnect();
+  await pool.end();
+};
