@@ -218,9 +218,24 @@ export function registerAdminHandlers(
         return next();
       }
 
+      /*
+       * At this point TypeScript knows that
+       * reply_to_message exists on ctx.message.
+       */
       const repliedMessage =
         ctx.message.reply_to_message;
 
+      if (!repliedMessage) {
+        return next();
+      }
+
+      /*
+       * The admin's rejection prompt contains:
+       *
+       * ❌ ပယ်ဖျက်မည် - ID: xxx
+       *
+       * Check its text before doing anything else.
+       */
       const replyText =
         'text' in repliedMessage
           ? repliedMessage.text
@@ -254,22 +269,33 @@ export function registerAdminHandlers(
             reason
           );
 
-        const originalMessage =
-          'reply_to_message' in repliedMessage
-            ? repliedMessage.reply_to_message
-            : undefined;
-
         /*
-         * The "❌ ပယ်ဖျက်မည်..." message is a
-         * separate reply, so Telegram's reply chain
-         * points back to the original admin listing.
+         * repliedMessage is the admin's
+         * "❌ ပယ်ဖျက်မည်..." message.
+         *
+         * That message itself was a reply to the
+         * original listing message.
+         *
+         * We only need the original message ID.
          */
+        let originalMessageId:
+          number | undefined;
 
-        if (originalMessage) {
+        if (
+          'reply_to_message' in repliedMessage &&
+          repliedMessage.reply_to_message
+        ) {
+          originalMessageId =
+            repliedMessage.reply_to_message.message_id;
+        }
+
+        if (
+          originalMessageId !== undefined
+        ) {
           try {
             await ctx.telegram.editMessageCaption(
               ctx.chat.id,
-              originalMessage.message_id,
+              originalMessageId,
               undefined,
               result.message,
               {
@@ -280,7 +306,7 @@ export function registerAdminHandlers(
             await ctx.telegram
               .editMessageText(
                 ctx.chat.id,
-                originalMessage.message_id,
+                originalMessageId,
                 undefined,
                 result.message,
                 {
