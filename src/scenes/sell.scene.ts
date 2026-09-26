@@ -160,27 +160,42 @@ export const sellScene = new Scenes.WizardScene<MyContext>(
       }
 
       try {
-        await ctx.reply('⌛ သင့်ပစ္စည်းကို စိစစ်ရန် ပို့ပေးနေပါသည်...');
+  await ctx.reply('⌛ သင့်ပစ္စည်းကို စိစစ်ရန် ပို့ပေးနေပါသည်...');
 
-        await ctx.listingService.createListing({
-          sellerTelegramId: ctx.from!.id,
-          sellerUsername: ctx.from!.username || null,
-          sellerFirstName: ctx.from!.first_name || null,
-          productName: state.productName!,
-          category: state.category!,
-          location: state.location!,
-          priceAmount: state.price!.priceAmount,
-          currency: state.price!.currency,
-          condition: state.condition!,
-          contact: state.contact!,
-          photoFileIds: photoIds,
-        });
+  console.log('📝 Creating listing in database...');
 
-        await ctx.reply('✅ သင့်ပစ္စည်းကို အောင်မြင်စွာ တင်ပြီးပါပြီ။ Admin များ စိစစ်ပြီးပါက Channel တွင် ဖော်ပြပေးပါမည်။');
-      } catch (error) {
-        console.error('Failed to save listing:', error);
-        await ctx.reply('⚠️ စနစ်ပိုင်းဆိုင်ရာ အမှားအယွင်း ဖြစ်ပေါ်နေပါသည်။ ကျေးဇူးပြု၍ နောက်ထပ်ကြိုးစားပါ။');
-      }
+  const listing = await ctx.listingService.createListing({
+    sellerTelegramId: ctx.from!.id,
+    sellerUsername: ctx.from!.username || null,
+    sellerFirstName: ctx.from!.first_name || null,
+    productName: state.productName!,
+    category: state.category!,
+    location: state.location!,
+    priceAmount: state.price!.priceAmount,
+    currency: state.price!.currency,
+    condition: state.condition!,
+    contact: state.contact!,
+    photoFileIds: photoIds,
+  });
+
+  console.log('✅ Listing created:', listing.id);
+
+  await ctx.reply(
+    '✅ သင့်ပစ္စည်းကို အောင်မြင်စွာ တင်ပြီးပါပြီ။ Admin များ စိစစ်ပြီးပါက Channel တွင် ဖော်ပြပေးပါမည်။'
+  );
+
+} catch (error) {
+  console.error('❌ Failed to save listing:', error);
+
+  if (error instanceof Error) {
+    console.error('❌ Error message:', error.message);
+    console.error('❌ Error stack:', error.stack);
+  }
+
+  await ctx.reply(
+    '⚠️ စနစ်ပိုင်းဆိုင်ရာ အမှားအယွင်း ဖြစ်ပေါ်နေပါသည်။ ကျေးဇူးပြု၍ နောက်ထပ်ကြိုးစားပါ။'
+  );
+}
 
       return ctx.scene.leave();
     }
