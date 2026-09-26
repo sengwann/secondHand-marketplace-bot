@@ -278,16 +278,14 @@ export function registerAdminHandlers(
          *
          * We only need the original message ID.
          */
-        let originalMessageId:
-          number | undefined;
+        const repliedMessageWithOriginal = repliedMessage as {
+  reply_to_message?: {
+    message_id: number;
+  };
+};
 
-        if (
-          'reply_to_message' in repliedMessage &&
-          repliedMessage.reply_to_message
-        ) {
-          originalMessageId =
-            repliedMessage.reply_to_message.message_id;
-        }
+const originalMessageId =
+  repliedMessageWithOriginal.reply_to_message?.message_id;
 
         if (
           originalMessageId !== undefined
