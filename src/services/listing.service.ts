@@ -1,23 +1,25 @@
 import { prisma } from '../db/prisma';
 import { TelegramService } from './telegram.service';
+import { ListingStatus } from '@prisma/client';
+
+export interface CreateListingInput {
+  sellerTelegramId: number;
+  sellerUsername?: string | null;
+  sellerFirstName?: string | null;
+  productName: string;
+  category: string;
+  location: string;
+  priceAmount: number;
+  currency: string;
+  condition: string;
+  contact: string;
+  photoFileIds: string[];
+}
 
 export class ListingService {
   constructor(private telegramService: TelegramService) {}
 
-  async createListing(data: {
-    sellerTelegramId: number;
-    sellerUsername?: string;
-    sellerFirstName?: string;
-    productName: string;
-    category: string;
-    location: string;
-    priceAmount: number;
-    currency: string;
-    condition: string;
-    contact: string;
-    photoFileIds: string[];
-  }) {
-    // 1. Save to Database (Cast sellerTelegramId to BigInt)
+  async createListing(data: CreateListingInput) {
     const listing = await prisma.listing.create({
       data: {
         sellerTelegramId: BigInt(data.sellerTelegramId),
@@ -31,19 +33,46 @@ export class ListingService {
         condition: data.condition,
         contact: data.contact,
         photoFileIds: data.photoFileIds,
+        status: ListingStatus.PENDING,
       },
     });
 
-    // 2. Convert BigInt to Number/String before sending to Telegram logic
     const formattedListing = {
       ...listing,
       sellerTelegramId: Number(listing.sellerTelegramId),
       channelMessageId: listing.channelMessageId ? Number(listing.channelMessageId) : null,
     };
 
-    // 3. Notify Admins
     await this.telegramService.sendToAdminGroup(formattedListing);
 
     return formattedListing;
+  }
+
+  async approveListing(id: string) {
+    const listing = await prisma.listing.findUnique({ where: { id } });
+    if (!listing) throw new Error('Listing not found');
+
+    const updated = await prisma.listing.update({
+      where: { id },
+      data: { status: ListingStatus.APPROVED },
+    });
+
+    return {
+      message: `✅ <b>အတည်ပြုပြီးပါပြီ</b>\n\nပစ္စည်း: ${updated.productName}\nဈေးနှုန်း: ${updated.priceAmount} ${updated.currency}`,
+    };
+  }
+
+  async rejectListing(id: string, reason: string) {
+    const listing = await prisma.listing.update({
+      where: { id },
+      data: {
+        status: ListingStatus.REJECTED,
+        rejectionReason: reason,
+      },
+    });
+
+    return {
+      message: `❌ <b>ပယ်ဖျက်ပြီးပါပြီ</b>\n\nပစ္စည်း: ${listing.productName}\nအကြောင်းပြချက်: ${reason}`,
+    };
   }
 }
