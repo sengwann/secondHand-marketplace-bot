@@ -15,7 +15,7 @@ interface WizardState {
     currency: Currency;
   };
   condition?: string;
-  note?: string;
+  note?: string | null;
   contact?: string;
   photoFileIds?: string[];
   [key: string]: any;
