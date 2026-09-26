@@ -29,6 +29,25 @@ export interface Price {
   currency: Currency;
 }
 
+export interface Listing {
+  id: string;
+  sellerTelegramId: number | bigint;
+  sellerUsername: string | null;
+  sellerFirstName: string | null;
+  productName: string;
+  category: Category | string;
+  location: Location | string;
+  priceAmount: number;
+  currency: Currency | string;
+  condition: string;
+  contact: string;
+  photoFileIds: string[];
+  status: ListingStatus | string;
+  rejectionReason?: string | null;
+  channelMessageId?: number | bigint | null;
+  createdAt?: Date;
+}
+
 export interface WizardSessionData extends Scenes.WizardSessionData {
   productName?: string;
   category?: Category;

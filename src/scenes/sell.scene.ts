@@ -1,14 +1,15 @@
 import { Scenes, Markup } from 'telegraf';
-import { MyContext, Category, Location, Currency } from '../types/listing';
+import { MyContext, Category, Location, Currency, WizardSessionData } from '../types/listing';
 
-const wiz = (ctx: MyContext) => ctx.scene.session.wizard;
+// Telegraf wizard state helper
+const wiz = (ctx: MyContext) => ctx.wizard.state as WizardSessionData;
 
 export const sellScene = new Scenes.WizardScene<MyContext>(
   'SELL_SCENE',
-  
+
   // Step 1: Ask Product Name
   async (ctx) => {
-    ctx.scene.session.wizard = {};
+    ctx.wizard.state = {};
     await ctx.reply('📦 ရောင်းချလိုသော ပစ္စည်း၏ အမည်ကို ရေးပြပေးပါ -');
     return ctx.wizard.next();
   },
