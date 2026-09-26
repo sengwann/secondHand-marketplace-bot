@@ -1,5 +1,5 @@
 import { Scenes, Markup } from 'telegraf';
-import { MyContext, WizardSessionData, Category, Location } from '../types/listing';
+import { MyContext, WizardSessionData, Category, Location, Currency } from '../types/listing';
 import { generateListingId } from '../utils/idGenerator';
 import { z } from 'zod';
 
