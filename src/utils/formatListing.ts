@@ -19,8 +19,8 @@ const categoryNames: Record<Category, string> = {
 };
 
 const locationNames: Record<Location, string> = {
-  [Location.SHWE_KOKKO]: 'ရွှေက္ကိုလ်',
-  [Location.MYAWADDY]: 'မြဝတီ',
+  [Location.SHWE_KOKKO]: 'ShweKok Ko',
+  [Location.MYAWADDY]: 'Myawaddy',
 };
 
 // ============================================================

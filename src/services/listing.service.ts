@@ -129,88 +129,94 @@ export class ListingService {
     return listing;
   }
 
-  // ==========================================================
-  // Approve listing
-  // ==========================================================
+  async approveListing(id: string) {
+  const listing = await ListingRepository.findById(id);
 
-  async approveListing(
-    id: string
-  ) {
-    const listing =
-      await ListingRepository.findById(id);
-
-    if (!listing) {
-      throw new Error(
-        'Listing not found.'
-      );
-    }
-
-    /*
-     * Only PENDING listings can be claimed.
-     *
-     * This protects against two admins clicking
-     * "Approve" at almost the same time.
-     */
-
-    const claimed =
-      await ListingRepository.claimForApproval(
-        id
-      );
-
-    if (!claimed) {
-      throw new Error(
-        'This listing has already been processed or is being processed.'
-      );
-    }
-
-    try {
-      const channelMessage =
-        await this.telegramService.publishToChannel(
-          listing
-        );
-
-      const channelMessageId =
-        channelMessage.message_id;
-
-      const approved =
-        await ListingRepository.approve(
-          id,
-          channelMessageId
-        );
-
-      if (!approved) {
-        throw new Error(
-          'Listing could not be marked as approved.'
-        );
-      }
-
-      return {
-        message:
-          `✅ <b>အတည်ပြုပြီးပါပြီ</b>\n\n` +
-          `ပစ္စည်း: ${listing.productName}\n` +
-          `ဈေးနှုန်း: ${listing.priceAmount} ${listing.currency}\n` +
-          `📢 Channel တွင် ဖော်ပြပြီးပါပြီ။`,
-      };
-    } catch (error) {
-      /*
-       * Telegram publishing failed.
-       *
-       * Put the listing back to PENDING so an admin
-       * can try again.
-       */
-
-      await ListingRepository
-        .rollbackToPending(id)
-        .catch((rollbackError) => {
-          console.error(
-            '❌ Failed to rollback listing:',
-            rollbackError
-          );
-        });
-
-      throw error;
-    }
+  if (!listing) {
+    throw new Error('Listing not found.');
   }
+
+  // Atomically claim the listing.
+  // Only PENDING → APPROVING is allowed.
+  const claimed = await ListingRepository.claimForApproval(id);
+
+  if (!claimed) {
+    throw new Error(
+      'This listing has already been processed or is being processed.'
+    );
+  }
+
+  let channelMessageId: number;
+
+  // ----------------------------------------------------------
+  // Step 1: Publish to Telegram
+  // ----------------------------------------------------------
+
+  try {
+    const channelMessage =
+      await this.telegramService.publishToChannel(listing);
+
+    channelMessageId = channelMessage.message_id;
+  } catch (error) {
+    // Telegram definitely failed.
+    // Nothing was published, so it is safe to retry.
+    await ListingRepository
+      .rollbackToPending(id)
+      .catch((rollbackError) => {
+        console.error(
+          '❌ Failed to rollback listing:',
+          rollbackError
+        );
+      });
+
+    throw error;
+  }
+
+  // ----------------------------------------------------------
+  // Step 2: Finalize database state
+  // ----------------------------------------------------------
+
+  try {
+    const approved = await ListingRepository.approve(
+      id,
+      channelMessageId
+    );
+
+    if (!approved) {
+      throw new Error(
+        'Listing could not be marked as approved.'
+      );
+    }
+  } catch (error) {
+    // IMPORTANT:
+    //
+    // Telegram already succeeded.
+    // Do NOT rollback to PENDING.
+    //
+    // The listing remains APPROVING so it can be
+    // reconciled instead of being published again.
+    console.error(
+      '❌ Telegram published the listing, but database finalization failed:',
+      {
+        listingId: id,
+        channelMessageId,
+        error,
+      }
+    );
+
+    throw new Error(
+      'Listing was published to the channel, but the database could not finalize the approval.'
+    );
+  }
+
+  return {
+    message:
+      `✅ <b>အတည်ပြုပြီးပါပြီ</b>\n\n` +
+      `ပစ္စည်း: ${listing.productName}\n` +
+      `ဈေးနှုန်း: ${listing.priceAmount} ${listing.currency}\n` +
+      `📢 Channel တွင် ဖော်ပြပြီးပါပြီ။`,
+  };
+}
 
   // ==========================================================
   // Reject listing
