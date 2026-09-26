@@ -1,110 +1,56 @@
 import { Telegraf, Scenes, session, Markup } from 'telegraf';
+import express from 'express';
 import type { Agent } from 'http';
 import dotenv from 'dotenv';
-
-dotenv.config();
-
 import { config } from './config';
 import { MyContext, WizardSessionData } from './types/listing';
 import { sellScene } from './scenes/sell.scene';
 import { TelegramService } from './services/telegram.service';
 import { ListingService } from './services/listing.service';
-import { closeDatabase, getDatabase } from './db/database';
+import { SettingService } from './services/setting.service';
+import { prisma, closeDatabase } from './db/prisma';
 import { registerAdminHandlers } from './handlers/admin.handler';
 
-// --- 1. PROXY CONFIGURATION ---
-// Using require() to avoid ESM/CJS module resolution conflicts
+dotenv.config();
+
 function createProxyAgent(): Agent | undefined {
-  const socksProxy = process.env.SOCKS_PROXY;
-  const httpProxy = process.env.HTTP_PROXY;
-
-  if (socksProxy) {
-    console.log('🔌 Using SOCKS proxy...');
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { SocksProxyAgent } = require('socks-proxy-agent');
-    return new SocksProxyAgent(socksProxy) as Agent;
-  }
-
-  if (httpProxy) {
-    console.log('🔌 Using HTTP/HTTPS proxy...');
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { HttpsProxyAgent } = require('https-proxy-agent');
-    return new HttpsProxyAgent(httpProxy) as Agent;
-  }
-
+  if (process.env.SOCKS_PROXY) return new (require('socks-proxy-agent').SocksProxyAgent)(process.env.SOCKS_PROXY);
+  if (process.env.HTTP_PROXY) return new (require('https-proxy-agent').HttpsProxyAgent)(process.env.HTTP_PROXY);
   return undefined;
 }
 
 const proxyAgent = createProxyAgent();
+const bot = new Telegraf<MyContext>(config.botToken, proxyAgent ? { telegram: { agent: proxyAgent } } : undefined);
 
-// --- 2. BOT INITIALIZATION ---
-const bot = proxyAgent
-  ? new Telegraf<MyContext>(config.botToken, {
-      telegram: { agent: proxyAgent },
-    })
-  : new Telegraf<MyContext>(config.botToken);
-
-// Initialize SQLite Database
-getDatabase();
-
-// Setup Services
+// Services Initialization
 const telegramService = new TelegramService(bot);
 const listingService = new ListingService(telegramService);
+const settingService = new SettingService();
 
-// --- 3. DEBUG MIDDLEWARE ---
-bot.use(async (ctx, next) => {
-  try {
-    const updateType = ctx.updateType;
-    const userId = ctx.from?.id || 'Unknown';
-
-    if (updateType === 'message' && ctx.message && 'text' in ctx.message) {
-      console.log(`📥 RECEIVED MESSAGE: "${ctx.message.text}" from User ID: ${userId}`);
-    } else if (updateType === 'callback_query') {
-      console.log(`🔘 RECEIVED BUTTON CLICK from User ID: ${userId}`);
-    } else {
-      console.log(`🔄 RECEIVED UPDATE: ${updateType} from User ID: ${userId}`);
-    }
-  } catch (err) {
-    // Ignore logging errors
-  }
-  return next();
-});
-
-// --- 4. STANDARD MIDDLEWARE ---
-bot.use(session({
-  defaultSession: () => ({ wizard: {} } as Scenes.WizardSession<WizardSessionData>)
-}));
-
+// Middlewares
+bot.use(session({ defaultSession: () => ({ wizard: {} } as Scenes.WizardSession<WizardSessionData>) }));
 bot.use((ctx, next) => {
   ctx.listingService = listingService;
+  ctx.settingService = settingService;
   return next();
 });
 
 const stage = new Scenes.Stage<MyContext>([sellScene], { ttl: 3600 });
 bot.use(stage.middleware());
 
-// --- 5. COMMAND HANDLERS ---
-
+// Commands
 const startHandler = async (ctx: MyContext) => {
-  try {
-    await ctx.reply(
-      `မင်္ဂလာပါ။ ${config.channelName} bot မှ ကြိုဆိုပါတယ်။ 📦\n\nရွှေက္ကိုလ် နှင့် မြဝတီ မြို့ကန်သာအတွက် အထွေထွေ ရောင်းဝယ်မှု Bot တစ်ခု ဖြစ်ပါသည်။`,
-      Markup.inlineKeyboard([
-        [Markup.button.callback('🛍 ပစ္စည်းရောင်းမည်', 'start_sell')],
-        [Markup.button.callback('📜 စည်းကမ်းချက်များ', 'rules')]
-      ])
-    );
-  } catch (error) {
-    console.error('Error in startHandler:', error);
-  }
+  await ctx.reply(
+    `မင်္ဂလာပါ။ ${config.channelName} bot မှ ကြိုဆိုပါတယ်။ 📦\n\nရွှေက္ကိုလ် နှင့် မြဝတီ မြို့နယ်အတွက် အထွေထွေ ရောင်းဝယ်မှု Bot တစ်ခု ဖြစ်ပါသည်။`,
+    Markup.inlineKeyboard([
+      [Markup.button.callback('🛍 ပစ္စည်းရောင်းမည်', 'start_sell')],
+      [Markup.button.callback('📜 စည်းကမ်းချက်များ', 'rules')]
+    ])
+  );
 };
 
 bot.command('start', startHandler);
-
-bot.command('ရောင်းရန်', (ctx) => {
-  ctx.scene.enter('SELL_SCENE');
-});
-
+bot.command('ရောင်းရန်', (ctx) => ctx.scene.enter('SELL_SCENE'));
 bot.command('ပယ်ဖျက်ရန်', async (ctx) => {
   if (ctx.scene.current) {
     await ctx.scene.leave();
@@ -114,105 +60,69 @@ bot.command('ပယ်ဖျက်ရန်', async (ctx) => {
   }
 });
 
-// --- 6. CALLBACK HANDLERS ---
-
+// Callback Actions
 bot.action('start_sell', async (ctx) => {
   await ctx.answerCbQuery().catch(() => {});
   ctx.scene.enter('SELL_SCENE');
 });
 
+// Dynamic Rule Fetching Action
 bot.action('rules', async (ctx) => {
   await ctx.answerCbQuery().catch(() => {});
-  try {
-    await ctx.editMessageText(
-      '📜 စည်းကမ်းချက်များ\n\n' +
-      '၁။ မိမိပိုင်ဆိုင်သော ပစ္စည်းများကိုသာ ရောင်းချရပါမည်။\n' +
-      '၂။ ဥပဒေနှင့် ငြိစွန်းသော ပစ္စည်းများ လုံးဝ တင်ခြင်းမရှိရ။\n' +
-      '၃။ ဝယ်သူနှင့် ���ောင်းသူ အချင်းချင်း ငွေကြေးလိမ်လည်မှုများအတွက် Admin များကို သတင်းပေးပို့ရပါမည်။\n' +
-      '၄။ လူချင်းတွေ့ဆုံ၍ ပစ္စည်းသေချာ စစ်ဆေးပြီးမှသာ ငွေချေပါရန် အကြံပြုအပ်ပါသည်။\n' +
-      '၅။ Bot အသုံးပြုမှုနှင့် ပတ်သက်၍ စိတ်မပါသော အမည်များ၊ မမှန်ကန်သော အချက်အလက်များ တင်ခြင်းမပြုရ။',
-      Markup.inlineKeyboard([Markup.button.callback('◀️ နောက်သို့', 'back_to_start')])
-    );
-  } catch (error) {
-    console.error('Error editing rules message:', error);
-  }
+  const rulesText = await ctx.settingService.getRules();
+  
+  await ctx.editMessageText(
+    rulesText,
+    Markup.inlineKeyboard([Markup.button.callback('◀️ နောက်သို့', 'back_to_start')])
+  ).catch(() => {});
 });
 
 bot.action('back_to_start', async (ctx) => {
   await ctx.answerCbQuery().catch(() => {});
-  try {
-    await ctx.deleteMessage().catch(() => {});
-  } catch (e) {
-    // Ignore
-  }
+  await ctx.deleteMessage().catch(() => {});
   startHandler(ctx);
 });
 
-// Register Admin Handlers
-registerAdminHandlers(bot, listingService);
+// Register Admin Commands and Actions
+registerAdminHandlers(bot, listingService, settingService);
 
-// --- 7. GLOBAL ERROR HANDLER ---
+// Error & Shutdown Handling
 bot.catch((err, ctx) => {
-  console.error(`\n❌ CRITICAL ERROR for ${ctx.updateType}:`);
-  console.error(err);
-  ctx.reply('⚠️ စနစ်ပိုင်းဆိုင်ရာ အမှားအယွင်း ဖြစ်ပေါ်နေပါသည်။ ကျေးဇူးပြု၍ နောက်တစ်ကြိမ် ထပ်မံကြိုးစားပါ။');
+  console.error(`\n❌ CRITICAL ERROR for ${ctx.updateType}:`, err);
+  ctx.reply('⚠️ စနစ်ပိုင်းဆိုင်ရာ အမှားအယွင်း ဖြစ်ပေါ်နေပါသည်။ ကျေးဇူးပြု၍ နောက်တစ်ကြိမ် ထပ်မံကြိုးစားပါ။').catch(() => {});
 });
 
-// --- 8. GRACEFUL SHUTDOWN ---
 const stopBot = async (signal: string) => {
   console.log(`\n🛑 Received ${signal}. Stopping bot gracefully...`);
   bot.stop(signal);
-  closeDatabase();
+  await closeDatabase();
   process.exit(0);
 };
 
 process.once('SIGINT', () => stopBot('SIGINT'));
 process.once('SIGTERM', () => stopBot('SIGTERM'));
 
-// --- 9. WEBHOOK CONFIGURATION ---
-import express from 'express';
-
+// Server Execution
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 const WEBHOOK_PATH = process.env.WEBHOOK_PATH || '/telegram/webhook';
-const WEBHOOK_SECRET_TOKEN = process.env.WEBHOOK_SECRET_TOKEN;
-const WEBHOOK_DOMAIN = process.env.WEBHOOK_DOMAIN || process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
-const webhookUrl = `${WEBHOOK_DOMAIN.replace(/\/$/, '')}${WEBHOOK_PATH}`;
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET_TOKEN;
+const WEBHOOK_URL = `${(process.env.WEBHOOK_DOMAIN || `http://localhost:${PORT}`).replace(/\/$/, '')}${WEBHOOK_PATH}`;
 
-app.get('/', (req, res) => {
-  res.status(200).send('✅ Shwe Kokko & Myawaddy Marketplace Bot is alive!');
-});
-
+app.get('/', (req, res) => res.status(200).send('✅ Bot is alive!'));
 app.use(express.json());
-app.use(bot.webhookCallback(WEBHOOK_PATH, { secretToken: WEBHOOK_SECRET_TOKEN }));
+app.use(bot.webhookCallback(WEBHOOK_PATH, { secretToken: WEBHOOK_SECRET }));
 
-async function setupWebhook() {
-  try {
-    console.log('🚀 Setting Telegram webhook...');
-    await bot.telegram.setWebhook(webhookUrl, {
-      drop_pending_updates: true,
-      secret_token: WEBHOOK_SECRET_TOKEN,
-    });
-    console.log(`✅ Webhook configured successfully: ${webhookUrl}`);
-  } catch (err: unknown) {
-    const error = err as { code?: string; response?: { error_code?: number }; message?: string };
-    console.error('\n❌ FAILED TO SET WEBHOOK:');
-
-    if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED') {
-      console.error('Network Error: Your internet or VPN is blocking api.telegram.org.');
-    } else if (error.response?.error_code === 401) {
-      console.error('Auth Error: Your BOT_TOKEN in .env is invalid or revoked.');
-    } else {
-      console.error(error.message || err);
-    }
-
-    process.exit(1);
-  }
-}
-
-// --- 10. START SERVER ---
 app.listen(PORT, async () => {
   console.log(`🌐 Health-check server running on port ${PORT}`);
-  await setupWebhook();
-  console.log('✅ Bot is listening for webhook traffic...');
+  try {
+    await prisma.$connect();
+    console.log('✅ PostgreSQL Database connected successfully via Prisma 7+');
+    
+    await bot.telegram.setWebhook(WEBHOOK_URL, { drop_pending_updates: true, secret_token: WEBHOOK_SECRET });
+    console.log(`✅ Webhook configured: ${WEBHOOK_URL}`);
+  } catch (err) {
+    console.error('\n❌ FAILED TO START:', err);
+    process.exit(1);
+  }
 });

@@ -1,12 +1,5 @@
 import { Listing, Category, Location } from '../types/listing';
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
+import { escapeHtml } from './htmlEscape';
 
 const categoryLabels: Record<Category, string> = {
   [Category.ELECTRONICS]: '📱 ဖုန်း/လျှပ်စစ်',
@@ -25,19 +18,14 @@ export function formatListing(listing: Listing): string {
   const catLabel = categoryLabels[listing.category] || listing.category;
   const locLabel = locationLabels[listing.location] || listing.location;
 
-  return `🆕 ပစ္စည်းအသစ် ရောင်းရန်ရှိသည်
-━━━━━━━━━━━━━━━━━━━━
-
-🛍 ပစ္စည်း - ${escapeHtml(listing.product_name)}
-📂 အမျိုးအစား - ${escapeHtml(catLabel)}
-📍 တည်နေရာ - #${escapeHtml(locLabel)}
-💰 ရောင်းဈေး - ${listing.price_amount} ${escapeHtml(listing.currency)}
-✨ အခြေအနေ - ${escapeHtml(listing.condition)}
-📞 ဆက်သွယ်ရန် - ${escapeHtml(listing.contact)}
-
-🆔 Listing ID: #${escapeHtml(listing.id)}
-
-#${escapeHtml(listing.category)} #${escapeHtml(locLabel.replace(/\s+/g, ''))} #Available
-
-⚠️ သတိပေးချက်: လူချင်းတွေ့ဆုံ၍ ပစ္စည်းသေချာ စစ်ဆေးပြီးမှ ငွေချေပါ။`;
+  return `🆕 ပစ္စည်းအသစ် ရောင်းရန်ရှိသည်\n━━━━━━━━━━━━━━━━━━━━\n\n` +
+         `🛍 ပစ္စည်း - ${escapeHtml(listing.product_name)}\n` +
+         `📂 အမျိုးအစား - ${escapeHtml(catLabel)}\n` +
+         `📍 တည်နေရာ - #${escapeHtml(locLabel)}\n` +
+         `💰 ရောင်းဈေး - ${listing.price_amount} ${escapeHtml(listing.currency)}\n` +
+         `✨ အခြေအနေ - ${escapeHtml(listing.condition)}\n` +
+         `📞 ဆက်သွယ်ရန် - ${escapeHtml(listing.contact)}\n\n` +
+         `🆔 Listing ID: #${escapeHtml(listing.id)}\n\n` +
+         `#${escapeHtml(listing.category)} #${escapeHtml(locLabel.replace(/\s+/g, ''))} #Available\n\n` +
+         `⚠️ သတိပေးချက်: လူချင်းတွေ့ဆုံ၍ ပစ္စည်းသေချာ စစ်ဆေးပြီးမှ ငွေချေပါ။`;
 }

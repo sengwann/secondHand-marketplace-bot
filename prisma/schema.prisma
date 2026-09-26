@@ -1,0 +1,47 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ListingStatus {
+  PENDING
+  APPROVING
+  APPROVED
+  REJECTED
+}
+
+model Listing {
+  id               String        @id
+  sellerTelegramId BigInt        @map("seller_telegram_id")
+  sellerUsername   String?       @map("seller_username")
+  sellerFirstName  String?       @map("seller_first_name")
+  productName      String        @map("product_name")
+  category         String
+  location         String
+  priceAmount      Float         @map("price_amount")
+  currency         String
+  condition        String
+  contact          String
+  photoFileIds     String[]      @map("photo_file_ids")
+  status           ListingStatus @default(PENDING)
+  rejectionReason  String?       @map("rejection_reason")
+  channelMessageId BigInt?       @map("channel_message_id")
+  createdAt        DateTime      @default(now()) @map("created_at")
+
+  @@index([status])
+  @@index([sellerTelegramId])
+  @@index([createdAt])
+  @@map("listings")
+}
+
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("app_settings")
+}

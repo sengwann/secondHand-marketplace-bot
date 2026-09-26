@@ -41,7 +41,7 @@ export interface Listing {
   status: ListingStatus;
   rejection_reason: string | null;
   channel_message_id: number | null;
-  created_at: number;
+  created_at: Date;
 }
 
 export interface WizardSessionData extends Scenes.WizardSessionData {
@@ -59,4 +59,5 @@ export interface MyContext extends Context {
   session: Scenes.WizardSession<WizardSessionData>;
   wizard: Scenes.WizardContextWizard<MyContext>;
   listingService: import('../services/listing.service').ListingService;
+  settingService: import('../services/setting.service').SettingService;
 }

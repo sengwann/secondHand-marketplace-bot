@@ -1,72 +1,48 @@
-import { ListingRepository, CreateListingData } from '../db/listing.repository';
+import { ListingRepository } from '../db/listing.repository';
 import { TelegramService } from './telegram.service';
 import { Listing } from '../types/listing';
+import { CreateListingSchema, CreateListingDTO } from '../validators/listing.validator';
 
 export class ListingService {
   constructor(private telegramService: TelegramService) {}
 
-  async createListing(data: CreateListingData): Promise<Listing> {
-    // 1. Data Validation
-    validateListingData(data);
+  async createListing(data: CreateListingDTO): Promise<Listing> {
+    // 1. Zod Data Validation
+    const validData = CreateListingSchema.parse(data);
 
-    console.log('📝 [ListingService] Creating listing:', {
-      id: data.id,
-      sellerTelegramId: data.seller_telegram_id,
-      photoCount: data.photo_file_ids.length,
-      productName: data.product_name,
-    });
+    console.log('📝 [ListingService] Creating listing:', { id: validData.id });
 
     try {
-      // Step 1: SQLite Insert
-      console.log('💾 [ListingStep 1/3] Inserting into SQLite...', { id: data.id });
-      ListingRepository.create(data);
+      // 2. Prisma Insert & Retrieve in one operation
+      console.log('💾 [ListingStep 1] Inserting into PostgreSQL...');
+      const listing = await ListingRepository.create(validData);
 
-      // Step 2: Retrieve from SQLite
-      console.log('🔍 [ListingStep 2/3] Reading created listing from SQLite...', { id: data.id });
-      const listing = ListingRepository.findById(data.id);
-      if (!listing) {
-        throw new Error(`Failed to retrieve listing from database for ID: ${data.id}`);
-      }
-
-      // Step 3: Send Admin Preview via Telegram
-      const adminChatId = process.env.ADMIN_CHAT_ID;
-      console.log('📤 [ListingStep 3/3] Sending admin preview...', {
-        id: listing.id,
-        adminChatIdConfigured: !!adminChatId,
-        photoCount: listing.photo_file_ids.length,
-      });
-
-      if (!adminChatId) {
-        console.warn('⚠️ WARNING: ADMIN_CHAT_ID is missing in environment variables!');
-      }
-
+      // 3. Send Admin Preview via Telegram
+      console.log('📤 [ListingStep 2] Sending admin preview...');
       await this.telegramService.sendAdminPreview(listing);
 
       console.log('✅ [ListingService] Listing created successfully!', { id: listing.id });
       return listing;
 
     } catch (error: any) {
-      // Render Logs ထဲမှာ အပြည့်အစုံ မြင်ရအောင် စာသားအဖြစ် တိုက်ရိုက် Log ရိုက်မည်
-      console.error('❌ [ListingService Error] Listing creation failed!');
-      console.error('❌ Error Message:', error?.message || error);
-      console.error('❌ Error Stack:', error?.stack || 'No stack trace');
-      console.error('❌ Failed Data Payload:', JSON.stringify(data, null, 2));
-
-      throw error; // Re-throw to scene handler
+      console.error('❌ [ListingService Error] Listing creation failed!', error);
+      throw error;
     }
   }
 
   async approveListing(id: string): Promise<{ success: boolean; message: string }> {
-    const claimed = ListingRepository.claimForApproval(id);
+    const claimed = await ListingRepository.claimForApproval(id);
     if (!claimed) return { success: false, message: 'ဒီ ပို့စ်အား စိစစ်ပြီးသွားပါပြီ။' };
 
     try {
-      const listing = ListingRepository.findById(id);
+      const listing = await ListingRepository.findById(id);
       if (!listing) throw new Error('Listing not found after claim');
       
       const messageId = await this.telegramService.publishListing(listing);
-      if (!ListingRepository.approve(id, messageId)) {
-        ListingRepository.rollbackToPending(id);
+      const approved = await ListingRepository.approve(id, messageId);
+      
+      if (!approved) {
+        await ListingRepository.rollbackToPending(id);
         return { success: false, message: 'System error during approval.' };
       }
       
@@ -74,8 +50,8 @@ export class ListingService {
       return { success: true, message: 'အခြေအနေ: အတည်ပြုပြီးပါပြီ ✅' };
 
     } catch (error: any) {
-      ListingRepository.rollbackToPending(id);
-      console.error('❌ [Approval Failed] Rolled back to PENDING:', error?.message || error);
+      await ListingRepository.rollbackToPending(id);
+      console.error('❌ [Approval Failed] Rolled back to PENDING:', error);
       return { success: false, message: 'Channel တင်ရာတွင် အခက်အခဲရှိနေပါသည်။ နောက်ထပ်ကြိုးစားပါ။' };
     }
   }
@@ -84,51 +60,14 @@ export class ListingService {
     const safeReason = reason.trim();
     if (!safeReason) return { success: false, message: 'ပယ်ဖျက်ရသည့် အကြောင်းပြချက် မရှိပါ။' };
     
-    const rejected = ListingRepository.reject(id, safeReason);
+    const rejected = await ListingRepository.reject(id, safeReason);
     if (!rejected) return { success: false, message: 'ဒီ ပို့စ်အား စိစစ်ပြီးသွားပါပြီ။' };
     
-    const listing = ListingRepository.findById(id);
+    const listing = await ListingRepository.findById(id);
     if (listing) {
       await this.telegramService.notifySellerRejected(listing.seller_telegram_id, safeReason);
     }
     
     return { success: true, message: 'အခြေအနေ: ပယ်ဖျက်ပြီးပါပြီ ❌' };
-  }
-}
-
-function validateListingData(data: CreateListingData): void {
-  const requiredStrings: Array<[string, unknown]> = [
-    ['id', data.id], 
-    ['product_name', data.product_name], 
-    ['category', data.category],
-    ['location', data.location], 
-    ['currency', data.currency], 
-    ['condition', data.condition],
-    ['contact', data.contact],
-  ];
-
-  for (const [name, value] of requiredStrings) {
-    if (typeof value !== 'string' || !value.trim()) {
-      throw new Error(`Invalid listing field: ${name} (Value: ${value})`);
-    }
-  }
-
-  // Telegram User ID စစ်ဆေးခြင်း (Number ဖြစ်ပြီး Positive ဖြစ်ရမည်)
-  if (typeof data.seller_telegram_id !== 'number' || data.seller_telegram_id <= 0) {
-    throw new Error(`Invalid seller_telegram_id: ${data.seller_telegram_id}`);
-  }
-
-  // Price validation
-  if (!Number.isFinite(data.price_amount) || data.price_amount <= 0) {
-    throw new Error(`Invalid price_amount: ${data.price_amount}`);
-  }
-
-  // Photos validation
-  if (!Array.isArray(data.photo_file_ids) || data.photo_file_ids.length < 1 || data.photo_file_ids.length > 6) {
-    throw new Error(`photo_file_ids must contain between 1 and 6 photos. Received: ${data.photo_file_ids?.length}`);
-  }
-
-  if (data.photo_file_ids.some((id) => typeof id !== 'string' || !id.trim())) {
-    throw new Error('photo_file_ids contains an invalid Telegram file ID');
   }
 }

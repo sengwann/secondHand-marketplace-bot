@@ -3,31 +3,51 @@ import { MyContext } from '../types/listing';
 import { isAdmin } from '../middleware/adminAuth';
 import { config } from '../config';
 import { ListingService } from '../services/listing.service';
+import { SettingService } from '../services/setting.service';
 
-export function registerAdminHandlers(bot: Telegraf<MyContext>, listingService: ListingService) {
-
-  bot.action(/^approve:(.+)$/, async (ctx) => {
+export function registerAdminHandlers(
+  bot: Telegraf<MyContext>, 
+  listingService: ListingService,
+  settingService: SettingService
+) {
+  // Command for Admins to dynamically update rules
+  bot.command('setrules', async (ctx) => {
     if (!isAdmin(ctx)) {
-      await ctx.answerCbQuery('⚠️ ဤခလုတ်ကို အုပ်ထိန်းသူများသာ နှိပ်ခွင့်ရှိပါသည်။', { show_alert: true }).catch(() => {});
-      return;
+      return ctx.reply('⚠️ ဤ Command ကို အုပ်ထိန်းသူများသာ အသုံးပြုခွင့်ရှိပါသည်။');
     }
 
-    await ctx.answerCbQuery().catch(() => {});
-    const listingId = ctx.match[1];
+    const commandText = ctx.message.text;
+    const newRules = commandText.replace(/^\/setrules\s*/, '').trim();
+
+    if (!newRules) {
+      const currentRules = await settingService.getRules();
+      return ctx.reply(
+        `⚠️ စည်းကမ်းချက်အသစ် ထည့်သွင်းပေးပါ။\n\n` +
+        `အသုံးပြုပုံ:\n\`/setrules စည်းကမ်းချက်အသစ် စာသားများ...\` \n\n` +
+        `လက်ရှိ စည်းကမ်းချက်များ:\n\n${currentRules}`,
+        { parse_mode: 'Markdown' }
+      );
+    }
 
     try {
-      const result = await listingService.approveListing(listingId);
+      await settingService.updateRules(newRules);
+      await ctx.reply('✅ စည်းကမ်းချက်များကို အောင်မြင်စွာ ပြောင်းလဲပြီးပါပြီ။');
+    } catch (error) {
+      console.error('Failed to set rules:', error);
+      await ctx.reply('❌ စည်းကမ်းချက်များ ပြောင်းလဲရာတွင် အမှားအယွင်း ရှိနေပါသည်။');
+    }
+  });
 
+  bot.action(/^approve:(.+)$/, async (ctx) => {
+    if (!isAdmin(ctx)) return ctx.answerCbQuery('⚠️ ဤခလုတ်ကို အုပ်ထိန်းသူများသာ နှိပ်ခွင့်ရှိပါသည်။', { show_alert: true }).catch(() => {});
+    await ctx.answerCbQuery().catch(() => {});
+    
+    const listingId = ctx.match[1];
+    try {
+      const result = await listingService.approveListing(listingId);
       if (ctx.callbackQuery?.message) {
-        try {
-          await ctx.editMessageCaption(result.message, { parse_mode: 'HTML' });
-        } catch (err) {
-          try {
-            await ctx.editMessageText(result.message);
-          } catch (e) {
-            // Ignore editing errors
-          }
-        }
+        try { await ctx.editMessageCaption(result.message, { parse_mode: 'HTML' }); } 
+        catch { await ctx.editMessageText(result.message).catch(() => {}); }
       }
     } catch (error) {
       console.error('Admin approve error', error);
@@ -35,54 +55,27 @@ export function registerAdminHandlers(bot: Telegraf<MyContext>, listingService: 
   });
 
   bot.action(/^reject:(.+)$/, async (ctx) => {
-    if (!isAdmin(ctx)) {
-      await ctx.answerCbQuery('⚠️ ဤခလုတ်ကို အုပ်ထိန်းသူများသာ နှိပ်ခွင့်ရှိပါသည်။', { show_alert: true }).catch(() => {});
-      return;
-    }
-
+    if (!isAdmin(ctx)) return ctx.answerCbQuery('⚠️ ဤခလုတ်ကို အုပ်ထိန်းသူများသာ နှိပ်ခွင့်ရှိပါသည်။', { show_alert: true }).catch(() => {});
+    await ctx.answerCbQuery().catch(() => {});
+    
     const listingId = ctx.match[1];
     const originalMsgId = ctx.callbackQuery!.message!.message_id;
-
-    await ctx.answerCbQuery().catch(() => {});
-    await ctx.reply(
-      `❌ ပယ်ဖျက်မည် - ID: ${listingId} | MSG: ${originalMsgId}\n\nပယ်ဖျက်ရသည့် အကြောင်းပြချက်ကို ရေးပေးပါ -`,
-      Markup.forceReply()
-    );
+    await ctx.reply(`❌ ပယ်ဖျက်မည် - ID: ${listingId} | MSG: ${originalMsgId}\n\nပယ်ဖျက်ရသည့် အကြောင်းပြချက်ကို ရေးပေးပါ -`, Markup.forceReply());
   });
 
   bot.on('text', async (ctx, next) => {
-    if (
-      isAdmin(ctx) &&
-      ctx.chat?.id.toString() === config.adminChatId.toString() &&
-      ctx.message.reply_to_message
-    ) {
-      const replyToMsg = ctx.message.reply_to_message;
-      // Safe type guard: only access .text if it exists on the message type
-      const replyText = 'text' in replyToMsg ? replyToMsg.text : '';
+    if (isAdmin(ctx) && ctx.chat?.id.toString() === config.adminChatId.toString() && ctx.message.reply_to_message) {
+      const replyText = 'text' in ctx.message.reply_to_message ? ctx.message.reply_to_message.text : '';
       const match = replyText.match(/^❌ ပယ်ဖျက်မည် - ID: (.+) \| MSG: (\d+)/);
 
       if (match) {
-        const listingId = match[1];
-        const originalMsgId = parseInt(match[2], 10);
+        const [, listingId, originalMsgIdStr] = match;
         const reason = ctx.message.text.trim();
-
-        if (!reason) {
-          await ctx.reply('⚠️ အကြောင်းပြချက် မရှိပါ။');
-          return;
-        }
+        if (!reason) return ctx.reply('⚠️ အကြောင်းပြချက် မရှိပါ။');
 
         const result = await listingService.rejectListing(listingId, reason);
-
-        try {
-          await ctx.telegram.editMessageCaption(ctx.chat.id, originalMsgId, undefined, result.message, { parse_mode: 'HTML' });
-        } catch (err) {
-          try {
-            await ctx.telegram.editMessageText(ctx.chat.id, originalMsgId, undefined, result.message);
-          } catch (e) {
-            // Ignore
-          }
-        }
-
+        try { await ctx.telegram.editMessageCaption(ctx.chat.id, parseInt(originalMsgIdStr, 10), undefined, result.message, { parse_mode: 'HTML' }); } 
+        catch { await ctx.telegram.editMessageText(ctx.chat.id, parseInt(originalMsgIdStr, 10), undefined, result.message).catch(() => {}); }
         return;
       }
     }

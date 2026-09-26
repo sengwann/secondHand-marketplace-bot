@@ -15,71 +15,45 @@ export class TelegramService {
     ]);
 
     if (listing.photo_file_ids.length > 1) {
-      const msg = await this.bot.telegram.sendPhoto(config.adminChatId, listing.photo_file_ids[0], {
-        caption,
-        parse_mode: 'HTML',
-        ...keyboard
-      });
-
-      const media = listing.photo_file_ids.slice(1).map(fileId => ({
-        type: 'photo' as const,
-        media: fileId
-      }));
+      const msg = await this.bot.telegram.sendPhoto(config.adminChatId, listing.photo_file_ids[0], { caption, parse_mode: 'HTML', ...keyboard });
+      const media = listing.photo_file_ids.slice(1).map(fileId => ({ type: 'photo' as const, media: fileId }));
       await this.bot.telegram.sendMediaGroup(config.adminChatId, media);
       return msg.message_id;
-    } else if (listing.photo_file_ids.length === 1) {
-      const msg = await this.bot.telegram.sendPhoto(config.adminChatId, listing.photo_file_ids[0], {
-        caption,
-        parse_mode: 'HTML',
-        ...keyboard
-      });
-      return msg.message_id;
-    } else {
-      const msg = await this.bot.telegram.sendMessage(config.adminChatId, caption, {
-        parse_mode: 'HTML',
-        ...keyboard
-      });
-      return msg.message_id;
     }
+    
+    if (listing.photo_file_ids.length === 1) {
+      const msg = await this.bot.telegram.sendPhoto(config.adminChatId, listing.photo_file_ids[0], { caption, parse_mode: 'HTML', ...keyboard });
+      return msg.message_id;
+    } 
+
+    const msg = await this.bot.telegram.sendMessage(config.adminChatId, caption, { parse_mode: 'HTML', ...keyboard });
+    return msg.message_id;
   }
 
   async publishListing(listing: Listing): Promise<number> {
     const caption = formatListing(listing);
-    let messageId: number = 0;
-
     if (listing.photo_file_ids.length > 1) {
       const media = listing.photo_file_ids.map((fileId, index) => ({
-        type: 'photo' as const,
-        media: fileId,
-        caption: index === 0 ? caption : undefined,
-        parse_mode: 'HTML' as const
+        type: 'photo' as const, media: fileId, caption: index === 0 ? caption : undefined, parse_mode: 'HTML' as const
       }));
-
       const messages = await this.bot.telegram.sendMediaGroup(config.channelId, media);
-      messageId = messages[0].message_id;
-    } else if (listing.photo_file_ids.length === 1) {
-      const msg = await this.bot.telegram.sendPhoto(config.channelId, listing.photo_file_ids[0], {
-        caption,
-        parse_mode: 'HTML'
-      });
-      messageId = msg.message_id;
-    } else {
-      const msg = await this.bot.telegram.sendMessage(config.channelId, caption, {
-        parse_mode: 'HTML'
-      });
-      messageId = msg.message_id;
+      return messages[0].message_id;
     }
+    
+    if (listing.photo_file_ids.length === 1) {
+      const msg = await this.bot.telegram.sendPhoto(config.channelId, listing.photo_file_ids[0], { caption, parse_mode: 'HTML' });
+      return msg.message_id;
+    } 
 
-    return messageId;
+    const msg = await this.bot.telegram.sendMessage(config.channelId, caption, { parse_mode: 'HTML' });
+    return msg.message_id;
   }
 
   async notifySellerApproved(sellerId: number): Promise<void> {
-    const text = `✅ သင်၏ ပစ္စည်းတင်ပြချက်ကို အတည်ပြုပြီး Channel ပေါ်သို့ တင်ပေးလိုက်ပါပြီ။`;
-    await this.bot.telegram.sendMessage(sellerId, text);
+    await this.bot.telegram.sendMessage(sellerId, `✅ သင်၏ ပစ္စည်းတင်ပြချက်ကို အတည်ပြုပြီး Channel ပေါ်သို့ တင်ပေးလိုက်ပါပြီ။`);
   }
 
   async notifySellerRejected(sellerId: number, reason: string): Promise<void> {
-    const text = `❌ သင်၏ ပစ္စည်းတင်ပြချက်ကို ပယ်ဖျက်လိုက်ပါပြီ။\n\nအကြောင်းပြချက် -\n${reason}`;
-    await this.bot.telegram.sendMessage(sellerId, text);
+    await this.bot.telegram.sendMessage(sellerId, `❌ သင်၏ ပစ္စည်းတင်ပြချက်ကို ပယ်ဖျက်လိုက်ပါပြီ။\n\nအကြောင်းပြချက် -\n${reason}`);
   }
 }
