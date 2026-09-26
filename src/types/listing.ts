@@ -59,9 +59,9 @@ export interface WizardSessionData extends Scenes.WizardSessionData {
   productName?: string;
   category?: Category;
   location?: Location;
-  price?: Price;
+  price?:Price;
   condition?: string;
-  note?: string;
+  note?: string | null;
   contact?: string;
   photoFileIds?: string[];
 }

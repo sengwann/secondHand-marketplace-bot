@@ -50,11 +50,18 @@ const startHandler = async (ctx: MyContext) => {
 };
 
 bot.command('start', startHandler);
-bot.command('ရောင်းရန်', (ctx) => ctx.scene.enter('SELL_SCENE'));
+const sellHandler = (ctx: MyContext) =>
+  ctx.scene.enter('SELL_SCENE');
+
+bot.command('sell', sellHandler);
+bot.command('ရောင်းရန်', sellHandler);
 bot.command('ပယ်ဖျက်ရန်', async (ctx) => {
   if (ctx.scene.current) {
     await ctx.scene.leave();
-    await ctx.reply('❌ ပစ္စည်းတင်ခြင်းကို ပယ်ဖျက်လိုက်ပါပြီ။', Markup.removeKeyboard());
+    await ctx.reply(
+      '❌ ပစ္စည်းတင်ခြင်းကို ပယ်ဖျက်လိုက်ပါပြီ။',
+      Markup.removeKeyboard()
+    );
   } else {
     await ctx.reply('လက်ရှိတွင် ဖျက်သိမ်းရန် လုပ်ဆောင်ချက် မရှိပါ။');
   }
@@ -63,7 +70,7 @@ bot.command('ပယ်ဖျက်ရန်', async (ctx) => {
 // Callback Actions
 bot.action('start_sell', async (ctx) => {
   await ctx.answerCbQuery().catch(() => {});
-  ctx.scene.enter('SELL_SCENE');
+  await ctx.scene.enter('SELL_SCENE');
 });
 
 // Dynamic Rule Fetching Action
