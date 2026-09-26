@@ -20,9 +20,11 @@ export enum Location {
   MYAWADDY = 'MYAWADDY',
 }
 
+export type Currency = 'MMK' | 'THB';
+
 export interface Price {
   priceAmount: number;
-  currency: string;
+  currency: Currency;
 }
 
 export interface Listing {
@@ -34,7 +36,7 @@ export interface Listing {
   category: Category;
   location: Location;
   price_amount: number;
-  currency: string;
+  currency: Currency;
   condition: string;
   contact: string;
   photo_file_ids: string[];

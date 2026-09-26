@@ -57,19 +57,25 @@ export const sellScene = new Scenes.WizardScene<MyContext>(
     await ctx.reply('💰 ရောင်းချလိုသည့် ဈေးနှုန်းနှင့် ငွေကြေးအမျိုးအစားကို ရေးပေးပါ -\n\n(ဥပမာ - 20000 MMK သို့မဟုတ် 500 THB)');
     ctx.wizard.next();
   },
-  async (ctx) => {
-    const text = ctx.message && 'text' in ctx.message ? ctx.message.text.trim() : '';
-    const match = text.match(/^(\d+(?:\.\d+)?)\s*([a-zA-Z]+)$/);
-    if (!match) return ctx.reply('⚠️ ဈေးနှုန်းနှင့် ငွေကြေးကို မှန်ကန်စွာ ရေးပေးပါ။ (ဥပမာ - 20000 MMK)');
-    const amount = parseFloat(match[1]);
-    const currency = match[2].toUpperCase();
-    if (amount <= 0 || !['MMK', 'THB', 'USD'].includes(currency)) {
-      return ctx.reply(`⚠️ ဈေးနှုန်းမှားယွင်းနေပါသည်။ (MMK, THB သို့မဟုတ် USD ကို အသုံးပြုပါ)`);
-    }
-    wiz(ctx).price = { priceAmount: amount, currency };
-    await ctx.reply('✨ ပစ္စည်း၏ လက်ရှိအခြေအနေနှင့် အပြစ်အနာဆာများကို ရေးပြပေးပါ -\n\n(ဥပမာ - 90% သန့်၊ အစုတ်အပြဲမရှိ၊ ဘူးပါမည်)');
-    ctx.wizard.next();
-  },
+async (ctx) => {
+  const text = ctx.message && 'text' in ctx.message ? ctx.message.text.trim() : '';
+  const match = text.match(/^(\d+(?:\.\d+)?)\s*([a-zA-Z]+)$/);
+  
+  if (!match) {
+    return ctx.reply('⚠️ ဈေးနှုန်းနှင့် ငွေကြေးကို မှန်ကန်စွာ ရေးပေးပါ။ (ဥပမာ - 20000 MMK)');
+  }
+
+  const amount = parseFloat(match[1]);
+  const currency = match[2].toUpperCase() as Currency;
+
+  if (amount <= 0 || !['MMK', 'THB'].includes(currency)) {
+    return ctx.reply('⚠️ ဈေးနှုန်းမှားယွင်းနေပါသည်။ (MMK, THB သို့မဟုတ်အသုံးပြုပါ)');
+  }
+
+  wiz(ctx).price = { priceAmount: amount, currency };
+  await ctx.reply('✨ ပစ္စည်း၏ လက်ရှိအခြေအနေနှင့် အပြစ်အနာဆာများကို ရေးပြပေးပါ -\n\n(ဥပမာ - 90% သန့်၊ အစုတ်အပြဲမရှိ၊ ဘူးပါမည်)');
+  ctx.wizard.next();
+},
   async (ctx) => {
     const text = ctx.message && 'text' in ctx.message ? ctx.message.text.trim() : '';
     if (!text || text.length > 500) return ctx.reply('⚠️ ပစ္စည်းအခြေအနေကို မှန်ကန်စွာ ရေးပေးပါ။');
