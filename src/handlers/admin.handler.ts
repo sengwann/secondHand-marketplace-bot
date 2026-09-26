@@ -38,20 +38,49 @@ export function registerAdminHandlers(
   });
 
   bot.action(/^approve:(.+)$/, async (ctx) => {
-    if (!isAdmin(ctx)) return ctx.answerCbQuery('⚠️ ဤခလုတ်ကို အုပ်ထိန်းသူများသာ နှိပ်ခွင့်ရှိပါသည်။', { show_alert: true }).catch(() => {});
-    await ctx.answerCbQuery().catch(() => {});
+  if (!isAdmin(ctx)) {
+    return ctx
+      .answerCbQuery(
+        '⚠️ ဤခလုတ်ကို အုပ်ထိန်းသူများသာ နှိပ်ခွင့်ရှိပါသည်။',
+        { show_alert: true }
+      )
+      .catch(() => {});
+  }
 
-    const listingId = ctx.match[1];
-    try {
-      const result = await listingService.approveListing(listingId);
-      if (ctx.callbackQuery?.message) {
-        try { await ctx.editMessageCaption(result.message, { parse_mode: 'HTML' }); }
-        catch { await ctx.editMessageText(result.message, { parse_mode: 'HTML' }).catch(() => {}); }
+  await ctx.answerCbQuery('⏳ အတည်ပြုနေပါသည်...').catch(() => {});
+
+  const listingId = ctx.match[1];
+
+  try {
+    const result =
+      await listingService.approveListing(listingId);
+
+    if (ctx.callbackQuery?.message) {
+      try {
+        await ctx.editMessageCaption(
+          result.message,
+          { parse_mode: 'HTML' }
+        );
+      } catch {
+        await ctx
+          .editMessageText(
+            result.message,
+            { parse_mode: 'HTML' }
+          )
+          .catch(() => {});
       }
-    } catch (error) {
-      console.error('Admin approve error:', error);
     }
-  });
+  } catch (error) {
+    console.error('Admin approve error:', error);
+
+    await ctx
+      .answerCbQuery(
+        '❌ အတည်ပြု၍ မရပါ။ Render logs ကို စစ်ဆေးပါ။',
+        { show_alert: true }
+      )
+      .catch(() => {});
+  }
+});
 
   bot.action(/^reject:(.+)$/, async (ctx) => {
     if (!isAdmin(ctx)) return ctx.answerCbQuery('⚠️ ဤခလုတ်ကို အုပ်ထိန်းသူများသာ နှိပ်ခွင့်ရှိပါသည်။', { show_alert: true }).catch(() => {});
