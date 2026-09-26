@@ -85,93 +85,101 @@ export function registerAdminHandlers(
   );
 
   // ==========================================================
-  // Approve
-  // ==========================================================
+// Approve
+// ==========================================================
 
-  bot.action(
-    /^approve:(.+)$/,
-    async (ctx) => {
-      if (!isAdmin(ctx)) {
-        await ctx
-          .answerCbQuery(
-            '⚠️ ဤခလုတ်ကို အုပ်ထိန်းသူများသာ နှိပ်ခွင့်ရှိပါသည်။',
-            {
-              show_alert: true,
-            }
-          )
-          .catch(() => {});
-
-        return;
-      }
-
+bot.action(
+  /^approve:(.+)$/,
+  async (ctx) => {
+    if (!isAdmin(ctx)) {
       await ctx
         .answerCbQuery(
-          '⏳ အတည်ပြုနေပါသည်...'
+          '⚠️ ဤခလုတ်ကို အုပ်ထိန်းသူများသာ နှိပ်ခွင့်ရှိပါသည်။',
+          {
+            show_alert: true,
+          }
         )
         .catch(() => {});
 
-      const listingId =
-        ctx.match[1];
+      return;
+    }
 
-      try {
-        const result =
-          await listingService.approveListing(
-            listingId
-          );
+    await ctx
+      .answerCbQuery(
+        '⏳ အတည်ပြုနေပါသည်...'
+      )
+      .catch(() => {});
 
-        /*
-         * The approve/reject buttons are now on
-         * a separate control message.
-         *
-         * We only need to update that control message
-         * after approval.
-         */
-        const controlMessage =
-          ctx.callbackQuery.message;
+    const listingId =
+      ctx.match[1];
 
-        if (!controlMessage) {
-          return;
-        }
-
-        try {
-          /*
-           * The control message is a normal text message,
-           * so update it using editMessageText().
-           */
-          await ctx.telegram.editMessageText(
-            ctx.chat.id,
-            controlMessage.message_id,
-            undefined,
-            result.message,
-            {
-              parse_mode: 'HTML',
-            }
-          );
-        } catch (error) {
-          console.error(
-            '❌ Failed to update approve control message:',
-            error
-          );
-        }
-      } catch (error) {
-        console.error(
-          '❌ Admin approve error:',
-          error
+    try {
+      const result =
+        await listingService.approveListing(
+          listingId
         );
 
-        await ctx
-          .answerCbQuery(
-            error instanceof Error
-              ? `❌ ${error.message}`
-              : '❌ အတည်ပြု၍ မရပါ။',
-            {
-              show_alert: true,
-            }
-          )
-          .catch(() => {});
+      /*
+       * The Approve/Reject buttons are on
+       * the separate control message.
+       */
+      const controlMessage =
+        ctx.callbackQuery.message;
+
+      if (!controlMessage) {
+        return;
       }
+
+      /*
+       * TypeScript knows ctx.chat can be undefined,
+       * so check it before using ctx.chat.id.
+       */
+      const chatId =
+        ctx.chat?.id;
+
+      if (chatId === undefined) {
+        return;
+      }
+
+      try {
+        /*
+         * The control message is a text message,
+         * so edit its text after approval.
+         */
+        await ctx.telegram.editMessageText(
+          chatId,
+          controlMessage.message_id,
+          undefined,
+          result.message,
+          {
+            parse_mode: 'HTML',
+          }
+        );
+      } catch (error) {
+        console.error(
+          '❌ Failed to update approve control message:',
+          error
+        );
+      }
+    } catch (error) {
+      console.error(
+        '❌ Admin approve error:',
+        error
+      );
+
+      await ctx
+        .answerCbQuery(
+          error instanceof Error
+            ? `❌ ${error.message}`
+            : '❌ အတည်ပြု၍ မရပါ။',
+          {
+            show_alert: true,
+          }
+        )
+        .catch(() => {});
     }
-  );
+  }
+);
 
   // ==========================================================
   // Reject
