@@ -81,30 +81,54 @@ export class ListingService {
   }
 
   async approveListing(id: string) {
-    const listing =
-      await prisma.listing.findUnique({
-        where: { id },
-      });
+  const listing = await prisma.listing.findUnique({
+    where: { id },
+  });
 
-    if (!listing) {
-      throw new Error('Listing not found');
-    }
-
-    const updated =
-      await prisma.listing.update({
-        where: { id },
-        data: {
-          status: ListingStatus.APPROVED,
-        },
-      });
-
-    return {
-      message:
-        `✅ <b>အတည်ပြုပြီးပါပြီ</b>\n\n` +
-        `ပစ္စည်း: ${updated.productName}\n` +
-        `ဈေးနှုန်း: ${updated.priceAmount} ${updated.currency}`,
-    };
+  if (!listing) {
+    throw new Error('Listing not found');
   }
+
+  // Publish to Telegram channel
+  const channelMessage =
+    await this.telegramService.publishToChannel({
+      id: listing.id,
+      sellerTelegramId: Number(
+        listing.sellerTelegramId
+      ),
+      sellerUsername: listing.sellerUsername,
+      sellerFirstName: listing.sellerFirstName,
+      productName: listing.productName,
+      category: listing.category,
+      location: listing.location,
+      priceAmount: listing.priceAmount,
+      currency: listing.currency,
+      condition: listing.condition,
+      note: listing.note,
+      contact: listing.contact,
+      photoFileIds: listing.photoFileIds,
+      availability: listing.availability,
+    });
+
+  // Mark as approved and save channel message ID
+  const updated = await prisma.listing.update({
+    where: { id },
+    data: {
+      status: ListingStatus.APPROVED,
+      channelMessageId: BigInt(
+        channelMessage.message_id
+      ),
+    },
+  });
+
+  return {
+    message:
+      `✅ <b>အတည်ပြုပြီးပါပြီ</b>\n\n` +
+      `ပစ္စည်း: ${updated.productName}\n` +
+      `ဈေးနှုန်း: ${updated.priceAmount} ${updated.currency}\n` +
+      `📢 Channel တွင် ဖော်ပြပြီးပါပြီ။`,
+  };
+}
 
   async rejectListing(
     id: string,

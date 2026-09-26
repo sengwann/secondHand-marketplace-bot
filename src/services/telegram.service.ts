@@ -169,4 +169,68 @@ export class TelegramService {
       }
     );
   }
+
+  async publishToChannel(listing: AdminListingPayload) {
+  const caption =
+    `<b>📌 ${escapeHtml(listing.productName)}</b>\n\n` +
+    `💰 <b>ဈေးနှုန်း:</b> ${escapeHtml(
+      listing.priceAmount
+    )} ${escapeHtml(listing.currency)}\n` +
+    `📦 <b>အခြေအနေ:</b> ${escapeHtml(listing.condition)}\n` +
+    `📍 <b>နေရာ:</b> ${escapeHtml(listing.location)}\n\n` +
+
+    (listing.note
+      ? `📝 <b>မှတ်ချက်:</b> ${escapeHtml(listing.note)}\n\n`
+      : '') +
+
+    `📞 <b>ဆက်သွယ်ရန်:</b> ${escapeHtml(listing.contact)}\n\n` +
+
+    `🏷️ #${escapeHtml(listing.category)} #${escapeHtml(
+      listing.location
+    )}\n` +
+    `🟢 <b>Available</b>`;
+
+  if (
+    !listing.photoFileIds ||
+    listing.photoFileIds.length === 0
+  ) {
+    return await this.bot.telegram.sendMessage(
+      config.channelId,
+      caption,
+      {
+        parse_mode: 'HTML',
+      }
+    );
+  }
+
+  console.log('📤 Publishing listing to channel...');
+  console.log('📢 Channel ID:', config.channelId);
+
+  try {
+    const result = await this.bot.telegram.sendPhoto(
+      config.channelId,
+      listing.photoFileIds[0],
+      {
+        caption,
+        parse_mode: 'HTML',
+      }
+    );
+
+    console.log('✅ Listing published to channel');
+
+    return result;
+  } catch (error) {
+    console.error(
+      '❌ Failed to publish listing to channel:',
+      error
+    );
+
+    if (error instanceof Error) {
+      console.error('❌ Telegram error:', error.message);
+      console.error('❌ Stack:', error.stack);
+    }
+
+    throw error;
+  }
+}
 }
