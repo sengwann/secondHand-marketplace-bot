@@ -1,18 +1,30 @@
 import { Scenes, Markup } from 'telegraf';
-import { MyContext, Category, Location, Currency, WizardSessionData } from '../types/listing';
+import { MyContext, Category, Location, Currency } from '../types/listing';
 
-// Telegraf wizard state helper
-const wiz = (ctx: MyContext) => ctx.wizard.state as WizardSessionData;
+interface WizardState {
+  productName?: string;
+  category?: Category;
+  location?: Location;
+  price?: {
+    priceAmount: number;
+    currency: Currency;
+  };
+  condition?: string;
+  contact?: string;
+  photoFileIds?: string[];
+  [key: string]: any;
+}
+
+const getWizState = (ctx: MyContext): WizardState => ctx.wizard.state as WizardState;
 
 export const sellScene = new Scenes.WizardScene<MyContext>(
   'SELL_SCENE',
 
- 
   // Step 1: Ask Product Name
   async (ctx) => {
-    // Clear previous wizard state properties safely without reassigning the read-only object
-    for (const key of Object.keys(ctx.wizard.state)) {
-      delete ctx.wizard.state[key];
+    const state = getWizState(ctx);
+    for (const key of Object.keys(state)) {
+      delete state[key];
     }
 
     await ctx.reply('📦 ရောင်းချလိုသော ပစ္စည်း၏ အမည်ကို ရေးပြပေးပါ -');
@@ -24,7 +36,9 @@ export const sellScene = new Scenes.WizardScene<MyContext>(
     const text = ctx.message && 'text' in ctx.message ? ctx.message.text.trim() : '';
     if (!text) return ctx.reply('⚠️ ပစ္စည်းအမည်ကို စာသားဖြင့် မှန်ကန်စွာ ရေးပြပေးပါ -');
 
-    wiz(ctx).productName = text;
+    const state = getWizState(ctx);
+    state.productName = text;
+
     await ctx.reply(
       '📂 ပစ္စည်း၏ အမျိုးအစားကို ရွေးချယ်ပါ -',
       Markup.inlineKeyboard([
@@ -49,7 +63,9 @@ export const sellScene = new Scenes.WizardScene<MyContext>(
       return ctx.reply('⚠️ မမှန်ကန်သော အမျိုးအစား ဖြစ်ပါသည်။');
     }
 
-    wiz(ctx).category = category;
+    const state = getWizState(ctx);
+    state.category = category;
+
     await ctx.answerCbQuery().catch(() => {});
     await ctx.reply(
       '📍 ပစ္စည်းရှိသော မြို့နယ်ကို ရွေးချယ်ပါ -',
@@ -72,7 +88,9 @@ export const sellScene = new Scenes.WizardScene<MyContext>(
       return ctx.reply('⚠️ မမှန်ကန်သော မြို့နယ် ဖြစ်ပါသည်။');
     }
 
-    wiz(ctx).location = location;
+    const state = getWizState(ctx);
+    state.location = location;
+
     await ctx.answerCbQuery().catch(() => {});
     await ctx.reply('💰 ဈေးနှုန်းနှင့် ငွေကြေးအမျိုးအစားကို ရေးပေးပါ - \n\n(ဥပမာ - 25000 MMK, 500 THB, 100 USD)');
     return ctx.wizard.next();
@@ -94,7 +112,9 @@ export const sellScene = new Scenes.WizardScene<MyContext>(
       return ctx.reply('⚠️ ဈေးနှုန်းမှားယွင်းနေပါသည်။ (MMK, THB သို့မဟုတ် USD ကို အသုံးပြုပါ)');
     }
 
-    wiz(ctx).price = { priceAmount: amount, currency };
+    const state = getWizState(ctx);
+    state.price = { priceAmount: amount, currency };
+
     await ctx.reply('✨ ပစ္စည်း၏ လက်ရှိအခြေအနေကို ရေးပြပေးပါ - \n\n(ဥပမာ - 90% သန့်၊ အစုတ်အပြဲမရှိ၊ ဘူးပါမည်)');
     return ctx.wizard.next();
   },
@@ -104,7 +124,9 @@ export const sellScene = new Scenes.WizardScene<MyContext>(
     const text = ctx.message && 'text' in ctx.message ? ctx.message.text.trim() : '';
     if (!text) return ctx.reply('⚠️ အခြေအနေကို စာသားဖြင့် ရေးပေးပါ -');
 
-    wiz(ctx).condition = text;
+    const state = getWizState(ctx);
+    state.condition = text;
+
     await ctx.reply('📞 ဝယ်ယူလိုသူများ ဆက်သွယ်ရန် ဖုန်းနံပါတ် သို့မဟုတ် Telegram Username ကို ရေးပေးပါ -');
     return ctx.wizard.next();
   },
@@ -114,8 +136,9 @@ export const sellScene = new Scenes.WizardScene<MyContext>(
     const text = ctx.message && 'text' in ctx.message ? ctx.message.text.trim() : '';
     if (!text) return ctx.reply('⚠️ ဆက်သွယ်ရန် အချက်အလက်ကို ရေးပေးပါ -');
 
-    wiz(ctx).contact = text;
-    wiz(ctx).photoFileIds = [];
+    const state = getWizState(ctx);
+    state.contact = text;
+    state.photoFileIds = [];
 
     await ctx.reply(
       '📷 ပစ္စည်းဓာတ်ပုံ ပို့ပေးပါ။\n\nအနည်းဆုံး ၁ ပုံ၊ အများဆုံး ၆ ပုံ ပို့နိုင်ပါသည်။\nဓာတ်ပုံ ပို့ပြီးပါက အောက်ပါ "ပြီးပြီ ✅" ခလုတ်ကို နှိပ်ပါ။',
@@ -126,15 +149,16 @@ export const sellScene = new Scenes.WizardScene<MyContext>(
 
   // Step 8: Receive Photos / Done Action -> Submit
   async (ctx) => {
+    const state = getWizState(ctx);
+
     if (ctx.callbackQuery && 'data' in ctx.callbackQuery && ctx.callbackQuery.data === 'photos_done') {
       await ctx.answerCbQuery().catch(() => {});
-      const photoIds = wiz(ctx).photoFileIds || [];
+      const photoIds = state.photoFileIds || [];
 
       if (photoIds.length === 0) {
         return ctx.reply('⚠️ အနည်းဆုံး ဓာတ်ပုံ ၁ ပုံ ပို့ပေးရန် လိုအပ်ပါသည်။');
       }
 
-      const session = wiz(ctx);
       try {
         await ctx.reply('⌛ သင့်ပစ္စည်းကို စိစစ်ရန် ပို့ပေးနေပါသည်...');
 
@@ -142,13 +166,13 @@ export const sellScene = new Scenes.WizardScene<MyContext>(
           sellerTelegramId: ctx.from!.id,
           sellerUsername: ctx.from!.username || null,
           sellerFirstName: ctx.from!.first_name || null,
-          productName: session.productName!,
-          category: session.category!,
-          location: session.location!,
-          priceAmount: session.price!.priceAmount,
-          currency: session.price!.currency,
-          condition: session.condition!,
-          contact: session.contact!,
+          productName: state.productName!,
+          category: state.category!,
+          location: state.location!,
+          priceAmount: state.price!.priceAmount,
+          currency: state.price!.currency,
+          condition: state.condition!,
+          contact: state.contact!,
           photoFileIds: photoIds,
         });
 
@@ -165,13 +189,13 @@ export const sellScene = new Scenes.WizardScene<MyContext>(
       const photos = ctx.message.photo;
       const largestPhoto = photos[photos.length - 1];
 
-      wiz(ctx).photoFileIds = wiz(ctx).photoFileIds || [];
-      if (wiz(ctx).photoFileIds!.length >= 6) {
+      state.photoFileIds = state.photoFileIds || [];
+      if (state.photoFileIds.length >= 6) {
         return ctx.reply('⚠️ ဓာတ်ပုံ ၆ ပုံထက် ပို၍ မတင်နိုင်ပါ။ "ပြီးပြီ ✅" ခလုတ်ကို နှိပ်ပါ။');
       }
 
-      wiz(ctx).photoFileIds!.push(largestPhoto.file_id);
-      await ctx.reply(`✅ ဓာတ်ပုံ လက်ခံရရှိပါပြီ။ (${wiz(ctx).photoFileIds!.length}/6)`);
+      state.photoFileIds.push(largestPhoto.file_id);
+      await ctx.reply(`✅ ဓာတ်ပုံ လက်ခံရရှိပါပြီ။ (${state.photoFileIds.length}/6)`);
       return;
     }
 
