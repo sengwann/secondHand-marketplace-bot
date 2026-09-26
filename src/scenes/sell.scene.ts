@@ -7,9 +7,14 @@ const wiz = (ctx: MyContext) => ctx.wizard.state as WizardSessionData;
 export const sellScene = new Scenes.WizardScene<MyContext>(
   'SELL_SCENE',
 
+ 
   // Step 1: Ask Product Name
   async (ctx) => {
-    ctx.wizard.state = {};
+    // Clear previous wizard state properties safely without reassigning the read-only object
+    for (const key of Object.keys(ctx.wizard.state)) {
+      delete ctx.wizard.state[key];
+    }
+
     await ctx.reply('📦 ရောင်းချလိုသော ပစ္စည်း၏ အမည်ကို ရေးပြပေးပါ -');
     return ctx.wizard.next();
   },
