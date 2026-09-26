@@ -9,6 +9,11 @@ export enum ListingStatus {
   REJECTED = 'REJECTED',
 }
 
+export enum ListingAvailability {
+  AVAILABLE = 'AVAILABLE',
+  SOLD_OUT = 'SOLD_OUT',
+}
+
 export enum Category {
   ELECTRONICS = 'ELECTRONICS',
   CLOTHING = 'CLOTHING',
@@ -40,9 +45,11 @@ export interface Listing {
   priceAmount: number;
   currency: Currency | string;
   condition: string;
+  note?: string | null;
   contact: string;
   photoFileIds: string[];
   status: ListingStatus | string;
+  availability: ListingAvailability | string;
   rejectionReason?: string | null;
   channelMessageId?: number | bigint | null;
   createdAt?: Date;
@@ -54,6 +61,7 @@ export interface WizardSessionData extends Scenes.WizardSessionData {
   location?: Location;
   price?: Price;
   condition?: string;
+  note?: string;
   contact?: string;
   photoFileIds?: string[];
 }
