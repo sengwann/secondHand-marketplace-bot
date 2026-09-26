@@ -324,23 +324,25 @@ export const sellScene =
     'SELL_SCENE',
 
     // ===========================================================
-    // STEP 0
-    // Start
-    // ===========================================================
-    async (ctx) => {
-      const state = getWizState(ctx);
+// STEP 0
+// Start
+// ===========================================================
+async (ctx) => {
+  const state = getWizState(ctx);
 
-      // New listing = new state.
-      Object.keys(state).forEach((key) => {
-        delete state[key];
-      });
+  // New listing = new state.
+  for (
+    const key of Object.keys(state) as Array<keyof WizardState>
+  ) {
+    delete state[key];
+  }
 
-      await ctx.reply(
-        '📦 ရောင်းချလိုသော ပစ္စည်း၏ အမည်ကို ရေးပြပေးပါ -'
-      );
+  await ctx.reply(
+    '📦 ရောင်းချလိုသော ပစ္စည်း၏ အမည်ကို ရေးပြပေးပါ -'
+  );
 
-      return ctx.wizard.next();
-    },
+  return ctx.wizard.next();
+},
 
     // ===========================================================
     // STEP 1

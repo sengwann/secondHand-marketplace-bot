@@ -7,6 +7,11 @@ import {
   Currency,
 } from '../types/listing';
 
+import {
+  ListingStatus as PrismaListingStatus,
+  ListingAvailability as PrismaListingAvailability,
+} from '@prisma/client';
+
 import { prisma } from './prisma';
 
 // ============================================================
@@ -51,8 +56,11 @@ function mapToEntity(
     note: string | null;
     contact: string;
     photoFileIds: string[];
-    status: ListingStatus;
-    availability: ListingAvailability;
+
+    // These come from Prisma
+    status: PrismaListingStatus;
+    availability: PrismaListingAvailability;
+
     rejectionReason: string | null;
     channelMessageId: bigint | null;
     createdAt: Date;
@@ -97,11 +105,12 @@ function mapToEntity(
     photoFileIds:
       model.photoFileIds,
 
+    // Convert Prisma enums into application enums
     status:
-      model.status,
+      model.status as ListingStatus,
 
     availability:
-      model.availability,
+      model.availability as ListingAvailability,
 
     rejectionReason:
       model.rejectionReason,

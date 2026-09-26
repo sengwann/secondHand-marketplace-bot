@@ -213,7 +213,7 @@ export function registerAdminHandlers(
       if (
         !isAdmin(ctx) ||
         !isAdminChat(ctx) ||
-        !ctx.message.reply_to_message
+        !('reply_to_message' in ctx.message)
       ) {
         return next();
       }
@@ -255,7 +255,9 @@ export function registerAdminHandlers(
           );
 
         const originalMessage =
-          repliedMessage.reply_to_message;
+          'reply_to_message' in repliedMessage
+            ? repliedMessage.reply_to_message
+            : undefined;
 
         /*
          * The "❌ ပယ်ဖျက်မည်..." message is a
