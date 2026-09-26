@@ -20,20 +20,20 @@
     "@prisma/adapter-pg": "^7.0.0",
     "@prisma/client": "^7.0.0",
     "@prisma/config": "^7.0.0",
+    "@types/express": "^5.0.6",
+    "@types/node": "^20.14.10",
+    "@types/pg": "^8.11.10",
     "dotenv": "^16.4.5",
     "express": "^5.2.1",
     "https-proxy-agent": "^9.1.0",
     "pg": "^8.13.1",
+    "prisma": "^7.0.0",
     "socks-proxy-agent": "^10.1.0",
     "telegraf": "^4.16.3",
+    "typescript": "^5.5.3",
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@types/express": "^5.0.6",
-    "@types/node": "^20.14.10",
-    "@types/pg": "^8.11.10",
-    "prisma": "^7.0.0",
-    "ts-node-dev": "^2.0.0",
-    "typescript": "^5.5.3"
+    "ts-node-dev": "^2.0.0"
   }
 }
