@@ -27,16 +27,48 @@ const telegramService = new TelegramService(bot);
 const listingService = new ListingService(telegramService);
 const settingService = new SettingService();
 
-// Middlewares
-bot.use(session({ defaultSession: () => ({ wizard: {} } as Scenes.WizardSession<WizardSessionData>) }));
+// ============================================================
+// Middleware
+// ============================================================
+
 bot.use((ctx, next) => {
-  ctx.listingService = listingService;
-  ctx.settingService = settingService;
+  console.log(
+    `📨 Telegram update: ${ctx.updateType}`
+  );
+
   return next();
 });
 
-const stage = new Scenes.Stage<MyContext>([sellScene], { ttl: 3600 });
-bot.use(stage.middleware());
+bot.use(
+  session({
+    defaultSession: () =>
+      ({
+        wizard: {},
+      } as Scenes.WizardSession<WizardSessionData>),
+  })
+);
+
+bot.use((ctx, next) => {
+  ctx.listingService =
+    listingService;
+
+  ctx.settingService =
+    settingService;
+
+  return next();
+});
+
+const stage =
+  new Scenes.Stage<MyContext>(
+    [sellScene],
+    {
+      ttl: 3600,
+    }
+  );
+
+bot.use(
+  stage.middleware()
+);
 
 // Commands
 const startHandler = async (ctx: MyContext) => {

@@ -4,8 +4,13 @@ import {
   Location,
   ListingAvailability,
 } from '../types/listing';
+import { escapeHtml } from './htmlEscape';
 
-const categoryNames: Record<string, string> = {
+// ============================================================
+// Labels
+// ============================================================
+
+const categoryNames: Record<Category, string> = {
   [Category.ELECTRONICS]: 'အီလက်ထရောနစ်',
   [Category.CLOTHING]: 'အဝတ်အထည်',
   [Category.HOME]: 'အိမ်သုံးပစ္စည်း',
@@ -13,20 +18,14 @@ const categoryNames: Record<string, string> = {
   [Category.OTHER]: 'အခြား',
 };
 
-const locationNames: Record<string, string> = {
+const locationNames: Record<Location, string> = {
   [Location.SHWE_KOKKO]: 'ရွှေက္ကိုလ်',
   [Location.MYAWADDY]: 'မြဝတီ',
 };
 
-function escapeHtml(
-  value: string | null | undefined
-): string {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
+// ============================================================
+// Hashtag
+// ============================================================
 
 function toHashtag(value: string): string {
   return value
@@ -38,16 +37,40 @@ function toHashtag(value: string): string {
     );
 }
 
+// ============================================================
+// Label helpers
+// ============================================================
+
+export function getCategoryLabel(
+  category: Category
+): string {
+  return (
+    categoryNames[category] ??
+    category
+  );
+}
+
+export function getLocationLabel(
+  location: Location
+): string {
+  return (
+    locationNames[location] ??
+    location
+  );
+}
+
+// ============================================================
+// Channel message
+// ============================================================
+
 export function formatListingMessage(
   listing: Listing
 ): string {
   const categoryLabel =
-    categoryNames[listing.category] ||
-    listing.category;
+    getCategoryLabel(listing.category);
 
   const locationLabel =
-    locationNames[listing.location] ||
-    listing.location;
+    getLocationLabel(listing.location);
 
   const categoryHashtag =
     toHashtag(categoryLabel);
@@ -66,21 +89,14 @@ export function formatListingMessage(
     : '';
 
   return (
-    `<b>📌 ${escapeHtml(
-      listing.productName
-    )}</b>\n\n` +
+    `<b>📌 ${escapeHtml(listing.productName)}</b>\n\n` +
 
     `💰 <b>ဈေးနှုန်း:</b> ` +
-    `${escapeHtml(
-      String(listing.priceAmount)
-    )} ${escapeHtml(
-      listing.currency
-    )}\n` +
+    `${escapeHtml(listing.priceAmount)} ` +
+    `${escapeHtml(listing.currency)}\n` +
 
     `📦 <b>အခြေအနေ:</b> ` +
-    `${escapeHtml(
-      listing.condition
-    )}\n` +
+    `${escapeHtml(listing.condition)}\n` +
 
     `📍 <b>နေရာ:</b> ` +
     `${escapeHtml(locationLabel)}\n` +
@@ -92,6 +108,6 @@ export function formatListingMessage(
 
     `🏷️ #${categoryHashtag} #${locationHashtag}\n` +
 
-    `${availability}`
+    availability
   );
 }

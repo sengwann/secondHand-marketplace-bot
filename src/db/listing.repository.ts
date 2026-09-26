@@ -1,82 +1,322 @@
-import { prisma } from './prisma';
-import { Listing, Category, Location, ListingStatus } from '../types/listing';
-import { CreateListingDTO } from '../validators/listing.validator';
+import {
+  Listing,
+  Category,
+  Location,
+  ListingStatus,
+  ListingAvailability,
+  Currency,
+} from '../types/listing';
 
-// Helper to map Prisma entity (with BigInt) to App entity (with Number)
-function mapToEntity(model: any): Listing {
+import { prisma } from './prisma';
+
+// ============================================================
+// Repository input
+// ============================================================
+
+export interface CreateListingRepositoryInput {
+  sellerTelegramId: number;
+  sellerUsername: string | null;
+  sellerFirstName: string | null;
+
+  productName: string;
+  category: Category;
+  location: Location;
+
+  priceAmount: number;
+  currency: Currency;
+
+  condition: string;
+  note: string | null;
+  contact: string;
+
+  photoFileIds: string[];
+}
+
+// ============================================================
+// Prisma -> Application entity
+// ============================================================
+
+function mapToEntity(
+  model: {
+    id: string;
+    sellerTelegramId: bigint;
+    sellerUsername: string | null;
+    sellerFirstName: string | null;
+    productName: string;
+    category: string;
+    location: string;
+    priceAmount: number;
+    currency: string;
+    condition: string;
+    note: string | null;
+    contact: string;
+    photoFileIds: string[];
+    status: ListingStatus;
+    availability: ListingAvailability;
+    rejectionReason: string | null;
+    channelMessageId: bigint | null;
+    createdAt: Date;
+  }
+): Listing {
   return {
-    ...model,
-    seller_telegram_id: Number(model.sellerTelegramId),
-    channel_message_id: model.channelMessageId ? Number(model.channelMessageId) : null,
-    category: model.category as Category,
-    location: model.location as Location,
-    status: model.status as ListingStatus,
-    photo_file_ids: model.photoFileIds,
-    price_amount: model.priceAmount,
-    seller_username: model.sellerUsername,
-    seller_first_name: model.sellerFirstName,
-    product_name: model.productName,
-    rejection_reason: model.rejectionReason,
-    created_at: model.createdAt,
+    id: model.id,
+
+    sellerTelegramId:
+      Number(model.sellerTelegramId),
+
+    sellerUsername:
+      model.sellerUsername,
+
+    sellerFirstName:
+      model.sellerFirstName,
+
+    productName:
+      model.productName,
+
+    category:
+      model.category as Category,
+
+    location:
+      model.location as Location,
+
+    priceAmount:
+      model.priceAmount,
+
+    currency:
+      model.currency as Currency,
+
+    condition:
+      model.condition,
+
+    note:
+      model.note,
+
+    contact:
+      model.contact,
+
+    photoFileIds:
+      model.photoFileIds,
+
+    status:
+      model.status,
+
+    availability:
+      model.availability,
+
+    rejectionReason:
+      model.rejectionReason,
+
+    channelMessageId:
+      model.channelMessageId === null
+        ? null
+        : Number(model.channelMessageId),
+
+    createdAt:
+      model.createdAt,
   };
 }
 
+// ============================================================
+// Repository
+// ============================================================
+
 export const ListingRepository = {
-  create: async (data: CreateListingDTO): Promise<Listing> => {
-    const created = await prisma.listing.create({
-      data: {
-        id: data.id,
-        sellerTelegramId: data.seller_telegram_id,
-        sellerUsername: data.seller_username,
-        sellerFirstName: data.seller_first_name,
-        productName: data.product_name,
-        category: data.category,
-        location: data.location,
-        priceAmount: data.price_amount,
-        currency: data.currency,
-        condition: data.condition,
-        contact: data.contact,
-        photoFileIds: data.photo_file_ids,
-        status: 'PENDING',
-      },
-    });
+  // ----------------------------------------------------------
+  // Create
+  // ----------------------------------------------------------
+
+  async create(
+    data: CreateListingRepositoryInput
+  ): Promise<Listing> {
+    const created =
+      await prisma.listing.create({
+        data: {
+          sellerTelegramId:
+            BigInt(data.sellerTelegramId),
+
+          sellerUsername:
+            data.sellerUsername,
+
+          sellerFirstName:
+            data.sellerFirstName,
+
+          productName:
+            data.productName,
+
+          category:
+            data.category,
+
+          location:
+            data.location,
+
+          priceAmount:
+            data.priceAmount,
+
+          currency:
+            data.currency,
+
+          condition:
+            data.condition,
+
+          note:
+            data.note,
+
+          contact:
+            data.contact,
+
+          photoFileIds:
+            data.photoFileIds,
+
+          status:
+            ListingStatus.PENDING,
+
+          availability:
+            ListingAvailability.AVAILABLE,
+        },
+      });
+
     return mapToEntity(created);
   },
 
-  findById: async (id: string): Promise<Listing | null> => {
-    const row = await prisma.listing.findUnique({ where: { id } });
-    if (!row) return null;
-    return mapToEntity(row);
+  // ----------------------------------------------------------
+  // Find by ID
+  // ----------------------------------------------------------
+
+  async findById(
+    id: string
+  ): Promise<Listing | null> {
+    const listing =
+      await prisma.listing.findUnique({
+        where: { id },
+      });
+
+    if (!listing) {
+      return null;
+    }
+
+    return mapToEntity(listing);
   },
 
-  claimForApproval: async (id: string): Promise<boolean> => {
-    const result = await prisma.listing.updateMany({
-      where: { id, status: 'PENDING' },
-      data: { status: 'APPROVING' },
-    });
+  // ----------------------------------------------------------
+  // Claim listing for approval
+  // ----------------------------------------------------------
+
+  async claimForApproval(
+    id: string
+  ): Promise<boolean> {
+    const result =
+      await prisma.listing.updateMany({
+        where: {
+          id,
+          status: ListingStatus.PENDING,
+        },
+
+        data: {
+          status:
+            ListingStatus.APPROVING,
+        },
+      });
+
     return result.count === 1;
   },
 
-  approve: async (id: string, channelMessageId: number): Promise<boolean> => {
-    const result = await prisma.listing.updateMany({
-      where: { id, status: 'APPROVING' },
-      data: { status: 'APPROVED', channelMessageId },
-    });
+  // ----------------------------------------------------------
+  // Approve
+  // ----------------------------------------------------------
+
+  async approve(
+    id: string,
+    channelMessageId: number
+  ): Promise<boolean> {
+    const result =
+      await prisma.listing.updateMany({
+        where: {
+          id,
+          status:
+            ListingStatus.APPROVING,
+        },
+
+        data: {
+          status:
+            ListingStatus.APPROVED,
+
+          channelMessageId:
+            BigInt(channelMessageId),
+        },
+      });
+
     return result.count === 1;
   },
 
-  reject: async (id: string, reason: string): Promise<boolean> => {
-    const result = await prisma.listing.updateMany({
-      where: { id, status: 'PENDING' },
-      data: { status: 'REJECTED', rejectionReason: reason },
-    });
+  // ----------------------------------------------------------
+  // Reject
+  // ----------------------------------------------------------
+
+  async reject(
+    id: string,
+    reason: string
+  ): Promise<boolean> {
+    const result =
+      await prisma.listing.updateMany({
+        where: {
+          id,
+          status:
+            ListingStatus.PENDING,
+        },
+
+        data: {
+          status:
+            ListingStatus.REJECTED,
+
+          rejectionReason:
+            reason,
+        },
+      });
+
     return result.count === 1;
   },
 
-  rollbackToPending: async (id: string): Promise<void> => {
-    await prisma.listing.updateMany({
-      where: { id, status: 'APPROVING' },
-      data: { status: 'PENDING' },
-    });
+  // ----------------------------------------------------------
+  // Rollback approval
+  // ----------------------------------------------------------
+
+  async rollbackToPending(
+    id: string
+  ): Promise<boolean> {
+    const result =
+      await prisma.listing.updateMany({
+        where: {
+          id,
+          status:
+            ListingStatus.APPROVING,
+        },
+
+        data: {
+          status:
+            ListingStatus.PENDING,
+        },
+      });
+
+    return result.count === 1;
   },
-}
+
+  // ----------------------------------------------------------
+  // Change availability
+  // ----------------------------------------------------------
+
+  async updateAvailability(
+    id: string,
+    availability: ListingAvailability
+  ): Promise<Listing> {
+    const updated =
+      await prisma.listing.update({
+        where: { id },
+
+        data: {
+          availability,
+        },
+      });
+
+    return mapToEntity(updated);
+  },
+};

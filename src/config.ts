@@ -2,25 +2,83 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-function requireEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) throw new Error(`❌ Missing required environment variable: ${name}`);
+// ============================================================
+// Environment helper
+// ============================================================
+
+function requireEnv(
+  name: string
+): string {
+  const value =
+    process.env[name]?.trim();
+
+  if (!value) {
+    throw new Error(
+      `❌ Missing required environment variable: ${name}`
+    );
+  }
+
   return value;
 }
 
-function parseAdminIds(ids: string): number[] {
-  return ids.split(',').map(id => {
-    const parsed = parseInt(id.trim(), 10);
-    if (isNaN(parsed)) throw new Error(`❌ Invalid ADMIN_USER_IDS format: ${id}`);
-    return parsed;
-  });
+// ============================================================
+// Admin IDs
+// ============================================================
+
+function parseAdminIds(
+  value: string
+): number[] {
+  const ids =
+    value
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean)
+      .map((id) => {
+        const parsed =
+          Number(id);
+
+        if (
+          !Number.isSafeInteger(parsed) ||
+          parsed <= 0
+        ) {
+          throw new Error(
+            `❌ Invalid ADMIN_USER_IDS value: ${id}`
+          );
+        }
+
+        return parsed;
+      });
+
+  if (ids.length === 0) {
+    throw new Error(
+      '❌ ADMIN_USER_IDS must contain at least one Telegram user ID.'
+    );
+  }
+
+  return [
+    ...new Set(ids),
+  ];
 }
 
+// ============================================================
+// Config
+// ============================================================
+
 export const config = {
-  botToken: requireEnv('BOT_TOKEN'),
-  adminChatId: requireEnv('ADMIN_CHAT_ID'),
-  channelId: requireEnv('CHANNEL_ID'),
-  adminUserIds: parseAdminIds(requireEnv('ADMIN_USER_IDS')),
-  channelName: requireEnv('CHANNEL_NAME'),
-  databaseUrl: requireEnv('DATABASE_URL'), // Migrated from DATABASE_PATH
+  botToken:
+    requireEnv('BOT_TOKEN'),
+
+  adminChatId:
+    requireEnv('ADMIN_CHAT_ID'),
+
+  channelId:
+    requireEnv('CHANNEL_ID'),
+
+  adminUserIds:
+    parseAdminIds(
+      requireEnv('ADMIN_USER_IDS')
+    ),
+
+  channelName:
+    requireEnv('CHANNEL_NAME'),
 };

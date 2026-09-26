@@ -1,19 +1,82 @@
 import { z } from 'zod';
-import { Category, Location } from '../types/listing';
+import {
+  Category,
+  Location,
+} from '../types/listing';
 
-export const CreateListingSchema = z.object({
-  id: z.string().min(1),
-  seller_telegram_id: z.number().positive(),
-  seller_username: z.string().nullable(),
-  seller_first_name: z.string().nullable(),
-  product_name: z.string().min(1).max(100),
-  category: z.nativeEnum(Category),
-  location: z.nativeEnum(Location),
-  price_amount: z.number().positive(),
-  currency: z.enum(['MMK', 'THB', 'USD']),
-  condition: z.string().min(1).max(500),
-  contact: z.string().min(1).max(100),
-  photo_file_ids: z.array(z.string()).min(1).max(6),
-});
+// ============================================================
+// Create Listing Schema
+// ============================================================
 
-export type CreateListingDTO = z.infer<typeof CreateListingSchema>;
+export const CreateListingSchema =
+  z.object({
+    sellerTelegramId:
+      z.number().int().positive(),
+
+    sellerUsername:
+      z.string()
+        .max(100)
+        .nullable()
+        .optional(),
+
+    sellerFirstName:
+      z.string()
+        .max(100)
+        .nullable()
+        .optional(),
+
+    productName:
+      z.string()
+        .trim()
+        .min(1)
+        .max(100),
+
+    category:
+      z.nativeEnum(Category),
+
+    location:
+      z.nativeEnum(Location),
+
+    priceAmount:
+      z.number()
+        .finite()
+        .positive(),
+
+    currency:
+      z.enum([
+        'MMK',
+        'THB',
+        'USD',
+      ]),
+
+    condition:
+      z.string()
+        .trim()
+        .min(1)
+        .max(500),
+
+    note:
+      z.string()
+        .trim()
+        .max(500)
+        .nullable()
+        .optional(),
+
+    contact:
+      z.string()
+        .trim()
+        .min(1)
+        .max(100),
+
+    photoFileIds:
+      z.array(z.string().min(1))
+        .min(1)
+        .max(6),
+  });
+
+// ============================================================
+// Type
+// ============================================================
+
+export type CreateListingDTO =
+  z.infer<typeof CreateListingSchema>;

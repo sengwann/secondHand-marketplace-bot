@@ -1,165 +1,289 @@
-import { prisma } from '../db/prisma';
-import { TelegramService } from './telegram.service';
 import {
-  ListingStatus,
   ListingAvailability,
-} from '@prisma/client';
+} from '../types/listing';
+
+import {
+  ListingRepository,
+  CreateListingRepositoryInput,
+} from '../db/listing.repository';
+
+import {
+  TelegramService,
+} from './telegram.service';
+
+import {
+  Category,
+  Currency,
+  Location,
+} from '../types/listing';
+
+// ============================================================
+// Create input
+// ============================================================
 
 export interface CreateListingInput {
   sellerTelegramId: number;
+
   sellerUsername?: string | null;
   sellerFirstName?: string | null;
+
   productName: string;
-  category: string;
-  location: string;
+  category: Category;
+  location: Location;
+
   priceAmount: number;
-  currency: string;
+  currency: Currency;
+
   condition: string;
   note?: string | null;
   contact: string;
+
   photoFileIds: string[];
 }
+
+// ============================================================
+// Service
+// ============================================================
 
 export class ListingService {
   constructor(
     private telegramService: TelegramService
   ) {}
 
-  async createListing(data: CreateListingInput) {
-    const listing = await prisma.listing.create({
-      data: {
-        sellerTelegramId: BigInt(
-          data.sellerTelegramId
-        ),
+  // ==========================================================
+  // Create listing
+  // ==========================================================
+
+  async createListing(
+    data: CreateListingInput
+  ) {
+    const repositoryData:
+      CreateListingRepositoryInput = {
+        sellerTelegramId:
+          data.sellerTelegramId,
+
         sellerUsername:
-          data.sellerUsername || null,
+          data.sellerUsername ?? null,
+
         sellerFirstName:
-          data.sellerFirstName || null,
-        productName: data.productName,
-        category: data.category,
-        location: data.location,
-        priceAmount: data.priceAmount,
-        currency: data.currency,
-        condition: data.condition,
-        note: data.note || null,
-        contact: data.contact,
-        photoFileIds: data.photoFileIds,
-        status: ListingStatus.PENDING,
-        availability:
-          ListingAvailability.AVAILABLE,
-      },
-    });
+          data.sellerFirstName ?? null,
 
-    const formattedListing = {
-      id: listing.id,
-      sellerTelegramId: Number(
-        listing.sellerTelegramId
-      ),
-      sellerUsername:
-        listing.sellerUsername,
-      sellerFirstName:
-        listing.sellerFirstName,
-      productName: listing.productName,
-      category: listing.category,
-      location: listing.location,
-      priceAmount: listing.priceAmount,
-      currency: listing.currency,
-      condition: listing.condition,
-      note: listing.note,
-      contact: listing.contact,
-      photoFileIds:
-        listing.photoFileIds,
-      availability:
-        listing.availability,
-    };
+        productName:
+          data.productName,
 
-    await this.telegramService.sendToAdminGroup(
-      formattedListing
-    );
+        category:
+          data.category,
 
-    return formattedListing;
+        location:
+          data.location,
+
+        priceAmount:
+          data.priceAmount,
+
+        currency:
+          data.currency,
+
+        condition:
+          data.condition,
+
+        note:
+          data.note ?? null,
+
+        contact:
+          data.contact,
+
+        photoFileIds:
+          data.photoFileIds,
+      };
+
+    const listing =
+      await ListingRepository.create(
+        repositoryData
+      );
+
+    try {
+      await this.telegramService.sendToAdminGroup(
+        listing
+      );
+    } catch (error) {
+      /*
+       * The database listing already exists.
+       *
+       * We intentionally don't delete it here because
+       * silently deleting a seller's submission can lose data.
+       *
+       * The error should be visible in Render logs so the
+       * admin can investigate.
+       */
+
+      console.error(
+        '❌ Listing saved but failed to send to admin group:',
+        error
+      );
+
+      throw new Error(
+        'Listing was saved, but sending to admin group failed.'
+      );
+    }
+
+    return listing;
   }
 
-  async approveListing(id: string) {
-  const listing = await prisma.listing.findUnique({
-    where: { id },
-  });
+  // ==========================================================
+  // Approve listing
+  // ==========================================================
 
-  if (!listing) {
-    throw new Error('Listing not found');
+  async approveListing(
+    id: string
+  ) {
+    const listing =
+      await ListingRepository.findById(id);
+
+    if (!listing) {
+      throw new Error(
+        'Listing not found.'
+      );
+    }
+
+    /*
+     * Only PENDING listings can be claimed.
+     *
+     * This protects against two admins clicking
+     * "Approve" at almost the same time.
+     */
+
+    const claimed =
+      await ListingRepository.claimForApproval(
+        id
+      );
+
+    if (!claimed) {
+      throw new Error(
+        'This listing has already been processed or is being processed.'
+      );
+    }
+
+    try {
+      const channelMessage =
+        await this.telegramService.publishToChannel(
+          listing
+        );
+
+      const channelMessageId =
+        channelMessage.message_id;
+
+      const approved =
+        await ListingRepository.approve(
+          id,
+          channelMessageId
+        );
+
+      if (!approved) {
+        throw new Error(
+          'Listing could not be marked as approved.'
+        );
+      }
+
+      return {
+        message:
+          `✅ <b>အတည်ပြုပြီးပါပြီ</b>\n\n` +
+          `ပစ္စည်း: ${listing.productName}\n` +
+          `ဈေးနှုန်း: ${listing.priceAmount} ${listing.currency}\n` +
+          `📢 Channel တွင် ဖော်ပြပြီးပါပြီ။`,
+      };
+    } catch (error) {
+      /*
+       * Telegram publishing failed.
+       *
+       * Put the listing back to PENDING so an admin
+       * can try again.
+       */
+
+      await ListingRepository
+        .rollbackToPending(id)
+        .catch((rollbackError) => {
+          console.error(
+            '❌ Failed to rollback listing:',
+            rollbackError
+          );
+        });
+
+      throw error;
+    }
   }
 
-  // Publish to Telegram channel
-  const channelMessage =
-    await this.telegramService.publishToChannel({
-      id: listing.id,
-      sellerTelegramId: Number(
-        listing.sellerTelegramId
-      ),
-      sellerUsername: listing.sellerUsername,
-      sellerFirstName: listing.sellerFirstName,
-      productName: listing.productName,
-      category: listing.category,
-      location: listing.location,
-      priceAmount: listing.priceAmount,
-      currency: listing.currency,
-      condition: listing.condition,
-      note: listing.note,
-      contact: listing.contact,
-      photoFileIds: listing.photoFileIds,
-      availability: listing.availability,
-    });
-
-  // Mark as approved and save channel message ID
-  const updated = await prisma.listing.update({
-    where: { id },
-    data: {
-      status: ListingStatus.APPROVED,
-      channelMessageId: BigInt(
-        channelMessage.message_id
-      ),
-    },
-  });
-
-  return {
-    message:
-      `✅ <b>အတည်ပြုပြီးပါပြီ</b>\n\n` +
-      `ပစ္စည်း: ${updated.productName}\n` +
-      `ဈေးနှုန်း: ${updated.priceAmount} ${updated.currency}\n` +
-      `📢 Channel တွင် ဖော်ပြပြီးပါပြီ။`,
-  };
-}
+  // ==========================================================
+  // Reject listing
+  // ==========================================================
 
   async rejectListing(
     id: string,
     reason: string
   ) {
+    const cleanReason =
+      reason.trim();
+
+    if (!cleanReason) {
+      throw new Error(
+        'Rejection reason is required.'
+      );
+    }
+
     const listing =
-      await prisma.listing.update({
-        where: { id },
-        data: {
-          status: ListingStatus.REJECTED,
-          rejectionReason: reason,
-        },
-      });
+      await ListingRepository.findById(id);
+
+    if (!listing) {
+      throw new Error(
+        'Listing not found.'
+      );
+    }
+
+    const rejected =
+      await ListingRepository.reject(
+        id,
+        cleanReason
+      );
+
+    if (!rejected) {
+      throw new Error(
+        'This listing has already been processed or is being processed.'
+      );
+    }
 
     return {
       message:
         `❌ <b>ပယ်ဖျက်ပြီးပါပြီ</b>\n\n` +
         `ပစ္စည်း: ${listing.productName}\n` +
-        `အကြောင်းပြချက်: ${reason}`,
+        `အကြောင်းပြချက်: ${cleanReason}`,
     };
   }
 
-  async markAsSoldOut(id: string) {
+  // ==========================================================
+  // Mark sold out
+  // ==========================================================
+
+  async markAsSoldOut(
+    id: string
+  ) {
     const listing =
-      await prisma.listing.update({
-        where: { id },
-        data: {
-          availability:
-            ListingAvailability.SOLD_OUT,
-        },
-      });
+      await ListingRepository.updateAvailability(
+        id,
+        ListingAvailability.SOLD_OUT
+      );
+
+    /*
+     * If this listing is already published,
+     * update the channel post too.
+     */
+
+    if (
+      listing.status === 'APPROVED' &&
+      listing.channelMessageId !== null
+    ) {
+      await this.telegramService.updateChannelListing(
+        listing
+      );
+    }
 
     return {
       message:
@@ -168,15 +292,27 @@ export class ListingService {
     };
   }
 
-  async markAsAvailable(id: string) {
+  // ==========================================================
+  // Mark available
+  // ==========================================================
+
+  async markAsAvailable(
+    id: string
+  ) {
     const listing =
-      await prisma.listing.update({
-        where: { id },
-        data: {
-          availability:
-            ListingAvailability.AVAILABLE,
-        },
-      });
+      await ListingRepository.updateAvailability(
+        id,
+        ListingAvailability.AVAILABLE
+      );
+
+    if (
+      listing.status === 'APPROVED' &&
+      listing.channelMessageId !== null
+    ) {
+      await this.telegramService.updateChannelListing(
+        listing
+      );
+    }
 
     return {
       message:

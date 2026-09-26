@@ -1,101 +1,60 @@
-import { Telegraf, Markup } from 'telegraf';
-import { MyContext } from '../types/listing';
+import {
+  Markup,
+  Telegraf,
+} from 'telegraf';
+
+import {
+  Listing,
+} from '../types/listing';
+
+import {
+  MyContext,
+} from '../types/listing';
+
 import { config } from '../config';
 
-export interface AdminListingPayload {
-  id: string;
-  sellerTelegramId: number;
-  sellerUsername?: string | null;
-  sellerFirstName?: string | null;
-  productName: string;
-  category: string;
-  location: string;
-  priceAmount: number;
-  currency: string;
-  condition: string;
-  note?: string | null;
-  contact: string;
-  photoFileIds: string[];
-  availability?: string;
-}
+import {
+  escapeHtml,
+} from '../utils/htmlEscape';
 
-function escapeHtml(
-  value: string | number | null | undefined
-): string {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
+import {
+  formatListingMessage,
+} from '../utils/formatListing';
+
+// ============================================================
+// Admin payload
+// ============================================================
+
+export interface AdminListingPayload
+  extends Listing {}
+
+// ============================================================
+// Telegram Service
+// ============================================================
 
 export class TelegramService {
   constructor(
     private bot: Telegraf<MyContext>
   ) {}
 
+  // ==========================================================
+  // Admin group
+  // ==========================================================
+
   async sendToAdminGroup(
     listing: AdminListingPayload
   ) {
-    const noteSection = listing.note
-      ? `\n📝 <b>မှတ်ချက်:</b> ${escapeHtml(
-          listing.note
-        )}\n`
-      : '';
-
     const caption =
-      `<b>📌 ရောင်းရန် ပစ္စည်းအသစ် ရောက်ရှိလာပါသည်</b>\n\n` +
+      this.buildAdminCaption(listing);
 
-      `📦 <b>ပစ္စည်းအမည်:</b> ` +
-      `${escapeHtml(
-        listing.productName
-      )}\n` +
-
-      `🏷️ <b>အမျိုးအစား:</b> ` +
-      `${escapeHtml(
-        listing.category
-      )}\n` +
-
-      `📍 <b>မြို့နယ်:</b> ` +
-      `${escapeHtml(
-        listing.location
-      )}\n` +
-
-      `💰 <b>ဈေးနှုန်း:</b> ` +
-      `${escapeHtml(
-        String(listing.priceAmount)
-      )} ${escapeHtml(
-        listing.currency
-      )}\n` +
-
-      `📦 <b>အခြေအနေ:</b> ` +
-      `${escapeHtml(
-        listing.condition
-      )}\n` +
-
-      noteSection +
-
-      `📞 <b>ဆက်သွယ်ရန်:</b> ` +
-      `${escapeHtml(
-        listing.contact
-      )}\n` +
-
-      `👤 <b>ရောင်းသူ:</b> ` +
-      `@${escapeHtml(
-        listing.sellerUsername ||
-          'မရှိပါ'
-      )} ` +
-      `(ID: <code>${escapeHtml(
-        listing.sellerTelegramId
-      )}</code>)`;
-
-    const inlineKeyboard =
+    const keyboard =
       Markup.inlineKeyboard([
         [
           Markup.button.callback(
             '✅ အတည်ပြုမည်',
             `approve:${listing.id}`
           ),
+
           Markup.button.callback(
             '❌ ငြင်းပယ်မည်',
             `reject:${listing.id}`
@@ -103,111 +62,49 @@ export class TelegramService {
         ],
       ]);
 
-    if (
-      listing.photoFileIds &&
-      listing.photoFileIds.length > 0
-    ) {
-      console.log(
-        '📤 Sending listing to admin group...'
-      );
-
-      console.log(
-        '📍 Admin Chat ID:',
-        config.adminChatId
-      );
-
-      console.log(
-        '🖼️ Photo File ID:',
-        listing.photoFileIds[0]
-      );
-
-      try {
-        const result =
-          await this.bot.telegram.sendPhoto(
-            config.adminChatId,
-            listing.photoFileIds[0],
-            {
-              caption,
-              parse_mode: 'HTML',
-              ...inlineKeyboard,
-            }
-          );
-
-        console.log(
-          '✅ Successfully sent listing to admin group'
-        );
-
-        return result;
-      } catch (error) {
-        console.error(
-          '❌ Failed to send listing to admin group:',
-          error
-        );
-
-        if (error instanceof Error) {
-          console.error(
-            '❌ Telegram error:',
-            error.message
-          );
-
-          console.error(
-            '❌ Stack:',
-            error.stack
-          );
+    if (listing.photoFileIds.length > 0) {
+      return this.bot.telegram.sendPhoto(
+        config.adminChatId,
+        listing.photoFileIds[0],
+        {
+          caption,
+          parse_mode: 'HTML',
+          ...keyboard,
         }
-
-        throw error;
-      }
+      );
     }
 
-    return await this.bot.telegram.sendMessage(
+    return this.bot.telegram.sendMessage(
       config.adminChatId,
       caption,
       {
         parse_mode: 'HTML',
-        ...inlineKeyboard,
+        ...keyboard,
       }
     );
   }
 
-  async publishToChannel(listing: AdminListingPayload) {
-  const caption =
-    `<b>📌 ${escapeHtml(listing.productName)}</b>\n\n` +
-    `💰 <b>ဈေးနှုန်း:</b> ${escapeHtml(
-      listing.priceAmount
-    )} ${escapeHtml(listing.currency)}\n` +
-    `📦 <b>အခြေအနေ:</b> ${escapeHtml(listing.condition)}\n` +
-    `📍 <b>နေရာ:</b> ${escapeHtml(listing.location)}\n\n` +
+  // ==========================================================
+  // Channel
+  // ==========================================================
 
-    (listing.note
-      ? `📝 <b>မှတ်ချက်:</b> ${escapeHtml(listing.note)}\n\n`
-      : '') +
-
-    `📞 <b>ဆက်သွယ်ရန်:</b> ${escapeHtml(listing.contact)}\n\n` +
-
-    `🏷️ #${escapeHtml(listing.category)} #${escapeHtml(
-      listing.location
-    )}\n` +
-    `🟢 <b>Available</b>`;
-
-  if (
-    !listing.photoFileIds ||
-    listing.photoFileIds.length === 0
+  async publishToChannel(
+    listing: Listing
   ) {
-    return await this.bot.telegram.sendMessage(
-      config.channelId,
-      caption,
-      {
-        parse_mode: 'HTML',
-      }
-    );
-  }
+    const caption =
+      formatListingMessage(listing);
 
-  console.log('📤 Publishing listing to channel...');
-  console.log('📢 Channel ID:', config.channelId);
+    if (listing.photoFileIds.length === 0) {
+      return this.bot.telegram.sendMessage(
+        config.channelId,
+        caption,
+        {
+          parse_mode: 'HTML',
+        }
+      );
+    }
 
-  try {
-    const result = await this.bot.telegram.sendPhoto(
+    return this.bot.telegram.sendPhoto(
       config.channelId,
       listing.photoFileIds[0],
       {
@@ -215,22 +112,108 @@ export class TelegramService {
         parse_mode: 'HTML',
       }
     );
+  }
 
-    console.log('✅ Listing published to channel');
+  // ==========================================================
+  // Edit existing channel post
+  // ==========================================================
 
-    return result;
-  } catch (error) {
-    console.error(
-      '❌ Failed to publish listing to channel:',
-      error
-    );
-
-    if (error instanceof Error) {
-      console.error('❌ Telegram error:', error.message);
-      console.error('❌ Stack:', error.stack);
+  async updateChannelListing(
+    listing: Listing
+  ): Promise<void> {
+    if (
+      listing.channelMessageId === null
+    ) {
+      return;
     }
 
-    throw error;
+    const caption =
+      formatListingMessage(listing);
+
+    try {
+      if (listing.photoFileIds.length > 0) {
+        await this.bot.telegram.editMessageCaption(
+          config.channelId,
+          listing.channelMessageId,
+          undefined,
+          caption,
+          {
+            parse_mode: 'HTML',
+          }
+        );
+
+        return;
+      }
+
+      await this.bot.telegram.editMessageText(
+        config.channelId,
+        listing.channelMessageId,
+        undefined,
+        caption,
+        {
+          parse_mode: 'HTML',
+        }
+      );
+    } catch (error) {
+      console.error(
+        '❌ Failed to update channel listing:',
+        error
+      );
+
+      throw error;
+    }
   }
-}
+
+  // ==========================================================
+  // Admin caption
+  // ==========================================================
+
+  private buildAdminCaption(
+    listing: Listing
+  ): string {
+    const noteSection =
+      listing.note
+        ? `\n📝 <b>မှတ်ချက်:</b> ` +
+          `${escapeHtml(listing.note)}\n`
+        : '';
+
+    const seller =
+      listing.sellerUsername
+        ? `@${escapeHtml(
+            listing.sellerUsername
+          )}`
+        : 'မရှိပါ';
+
+    return (
+      `<b>📌 ရောင်းရန် ပစ္စည်းအသစ် ရောက်ရှိလာပါသည်</b>\n\n` +
+
+      `📦 <b>ပစ္စည်းအမည်:</b> ` +
+      `${escapeHtml(listing.productName)}\n` +
+
+      `🏷️ <b>အမျိုးအစား:</b> ` +
+      `${escapeHtml(listing.category)}\n` +
+
+      `📍 <b>မြို့နယ်:</b> ` +
+      `${escapeHtml(listing.location)}\n` +
+
+      `💰 <b>ဈေးနှုန်း:</b> ` +
+      `${escapeHtml(listing.priceAmount)} ` +
+      `${escapeHtml(listing.currency)}\n` +
+
+      `📦 <b>အခြေအနေ:</b> ` +
+      `${escapeHtml(listing.condition)}\n` +
+
+      noteSection +
+
+      `📞 <b>ဆက်သွယ်ရန်:</b> ` +
+      `${escapeHtml(listing.contact)}\n` +
+
+      `👤 <b>ရောင်းသူ:</b> ` +
+      `${seller}\n` +
+
+      `(ID: <code>${escapeHtml(
+        listing.sellerTelegramId
+      )}</code>)`
+    );
+  }
 }
